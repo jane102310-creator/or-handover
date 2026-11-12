@@ -141,6 +141,18 @@
     <div id="list"><div class="empty">載入中…</div></div>
     <div class="msg" id="listMsg"></div>
   </section>
+
+  <section class="card hidden" id="adminCard">
+    <h2><span>成員管理 <small style="color:var(--muted);font-weight:400">（只有你看得到）</small></span></h2>
+    <p style="margin:0 0 10px;color:var(--muted);font-size:13px">輸入同事的 Gmail 加入名單，對方用這個 Google 帳號登入就能使用。</p>
+    <div class="grid">
+      <div><label>Gmail</label><input id="m_email" type="email" placeholder="example@gmail.com" autocapitalize="off"></div>
+      <div><label>姓名（方便辨識）</label><input id="m_name" placeholder="王小明"></div>
+    </div>
+    <div class="actions"><button type="button" class="btn primary" id="m_add">加入名單</button></div>
+    <div class="msg" id="m_msg"></div>
+    <div id="m_list"></div>
+  </section>
   </div>
 </div>
 
@@ -153,8 +165,9 @@
 
 <script type="module">
 const V="10.12.2";
+const ADMIN="jane102310@gmail.com";
 let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged,
-    getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
+    getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
 const watchdog=setTimeout(()=>{
   const s=document.getElementById("status");
   s.textContent="載入太久沒有回應。請按右上「⋯」用 Safari 或 Chrome 開啟此網址，或檢查網路後重新整理。"; s.className="status warn";
@@ -163,7 +176,7 @@ try{
   ({ firebaseConfig } = await import("./firebase-config.js?v=2"));
   ({ initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`));
   ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
-  ({ getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
+  ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
 }catch(e){
   clearTimeout(watchdog);
   const s=document.getElementById("status");
@@ -222,10 +235,13 @@ function startEdit(r){
   $("cancelEdit").classList.remove("hidden"); $("delBtn").classList.remove("hidden");
   setMsg("formMsg",""); $("form").scrollIntoView({behavior:"smooth"});
 }
-$("delBtn").onclick=()=>{ if(editingId) $("confirm").classList.add("show"); };
-$("cNo").onclick=()=> $("confirm").classList.remove("show");
+$("delBtn").onclick=()=>{ if(editingId){ pendingRemove=null; $("confirmText").textContent="確定要刪除這筆紀錄嗎？"; $("cYes").textContent="刪除"; $("confirm").classList.add("show"); } };
+$("cNo").onclick=()=>{ pendingRemove=null; $("confirm").classList.remove("show"); };
 $("cYes").onclick=async()=>{
   $("confirm").classList.remove("show");
+  if(pendingRemove){ const em=pendingRemove; pendingRemove=null;
+    try{ await deleteDoc(doc(fs,"or_members",em)); setMsg("m_msg","已移除。","ok"); }catch(e){ setMsg("m_msg","移除失敗（"+e.code+"）","err"); }
+    return; }
   try{ await deleteDoc(doc(fs,"or_records",editingId)); resetForm(); setMsg("formMsg","已刪除。","ok"); }
   catch(err){ setMsg("formMsg","刪除失敗，可能沒有權限。","err"); }
 };
@@ -277,6 +293,42 @@ $("copyBtn").onclick=async()=>{
   catch(e){ setMsg("listMsg","無法複製，請改用電腦瀏覽器再試。","err"); }
 };
 
+
+// ===== 成員管理（只有管理者）=====
+let unsubMembers=null, members=[], pendingRemove=null;
+function startAdmin(){
+  $("adminCard").classList.remove("hidden");
+  if(unsubMembers) return;
+  unsubMembers=onSnapshot(collection(fs,"or_members"), snap=>{
+    members=snap.docs.map(d=>({email:d.id, name:(d.data()||{}).name||""})).sort((a,b)=>a.email.localeCompare(b.email));
+    renderMembers();
+  }, err=> setMsg("m_msg","讀不到名單（"+err.code+"），請確認 Firebase 規則已更新。","err"));
+}
+function stopAdmin(){ $("adminCard").classList.add("hidden"); if(unsubMembers){unsubMembers();unsubMembers=null;} }
+function renderMembers(){
+  const box=$("m_list"); box.innerHTML="";
+  box.appendChild(el("div","meta",`目前名單（${members.length} 人）`));
+  members.forEach(m=>{
+    const row=el("div","rec"); row.style.cursor="default"; row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
+    const t=el("div",null,(m.name?m.name+"　":"")+m.email); t.style.flex="1"; t.style.wordBreak="break-all";
+    row.appendChild(t);
+    if(m.email!==ADMIN){
+      const b=el("button","btn danger","移除"); b.type="button"; b.style.padding="6px 10px";
+      b.onclick=()=>{ pendingRemove=m.email; $("confirmText").textContent=`確定要把 ${m.name||m.email} 移出名單嗎？移除後他就不能再使用。`; $("cYes").textContent="移除"; $("confirm").classList.add("show"); };
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  });
+}
+$("m_add").onclick=async()=>{
+  const email=$("m_email").value.trim().toLowerCase(), name=$("m_name").value.trim().slice(0,50);
+  if(!/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(email)){ setMsg("m_msg","請輸入正確的 Gmail。","err"); return; }
+  $("m_add").disabled=true;
+  try{ await setDoc(doc(fs,"or_members",email),{name, addedAt:Date.now()}); $("m_email").value=""; $("m_name").value=""; setMsg("m_msg",`已加入 ${name||email}。`,"ok"); }
+  catch(e){ setMsg("m_msg","加入失敗（"+e.code+"），請確認 Firebase 規則已更新。","err"); }
+  finally{ $("m_add").disabled=false; }
+};
+
 $("loginBtn").onclick=async()=>{
   try{ await signInWithPopup(auth,new GoogleAuthProvider()); }
   catch(e){
@@ -310,11 +362,12 @@ if(!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("
   onAuthStateChanged(auth, u=>{
     clearTimeout(watchdog); me=u;
     const bar=$("authBar"); bar.innerHTML="";
-    if(!u){ if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate("用 Google 帳號登入後才能查看與登打紀錄。",true); return; }
+    if(!u){ stopAdmin(); if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate("用 Google 帳號登入後才能查看與登打紀錄。",true); return; }
     bar.append(document.createTextNode(`已登入：${u.displayName||u.email}　`));
     const out=el("a",null,"登出"); out.href="#"; out.onclick=e=>{e.preventDefault(); signOut(auth);}; bar.append(out);
     $("gate").classList.add("hidden"); $("app").classList.remove("hidden");
     setStatus("連線中…"); startListening();
+    if((u.email||"").toLowerCase()===ADMIN) startAdmin(); else stopAdmin();
   });
 }
 </script>

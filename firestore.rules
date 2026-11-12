@@ -1,9 +1,11 @@
-    // ===== 刀房 未交班／交錯班紀錄（只有 or_members 名單裡的人能讀寫）=====
+    // ===== 刀房 未交班／交錯班紀錄 =====
+    // 只有 or_members 名單裡的人能讀寫紀錄；名單只有管理者能改（在網頁的「成員管理」）
     match /or_records/{id} {
       allow read, write: if request.auth != null
         && exists(/databases/$(database)/documents/or_members/$(request.auth.token.email));
     }
     match /or_members/{email} {
-      allow read: if request.auth != null && request.auth.token.email == email;
-      allow write: if false;
+      allow read: if request.auth != null
+        && (request.auth.token.email == email || request.auth.token.email == 'jane102310@gmail.com');
+      allow write: if request.auth != null && request.auth.token.email == 'jane102310@gmail.com';
     }
