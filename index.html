@@ -117,20 +117,35 @@
   </header>
 
   <div class="card hidden" id="gate">
-    <h2 id="gateTitle">登入</h2>
-    <form id="emForm" autocomplete="on" style="max-width:380px">
-      <label>Email</label><input id="g_email" type="email" autocomplete="username" autocapitalize="off" placeholder="管理者加入名單的信箱">
-      <label style="margin-top:10px">密碼</label><input id="g_pw" type="password" autocomplete="current-password" placeholder="至少 6 個字">
-      <div id="g_pw2Box" class="hidden"><label style="margin-top:10px">再輸入一次密碼</label><input id="g_pw2" type="password" autocomplete="new-password"></div>
-      <div class="actions" style="justify-content:flex-start"><button type="submit" class="btn primary" id="emBtn">登入</button></div>
-    </form>
-    <p class="msg" id="gateText"></p>
-    <p style="margin:10px 0 0;font-size:13px;line-height:2">
-      <a href="#" id="modeLink">第一次使用？設定我的密碼</a>　<a href="#" id="forgotLink">忘記密碼</a><br>
-      <a href="#" id="loginBtn" style="color:var(--muted)">用 Google 帳號登入</a>
-    </p>
+    <div id="loginBox">
+      <h2>登入</h2>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:14px">用 Gmail 登入。第一次登入會送出申請，管理者同意後就能使用。</p>
+      <button type="button" class="btn primary" id="loginBtn" style="width:100%;max-width:380px;padding:12px">用 Google（Gmail）登入</button>
+      <p class="msg" id="gateText"></p>
+      <details style="margin-top:14px;max-width:380px"><summary style="font-size:13px;color:var(--muted);cursor:pointer">沒有 Gmail？改用信箱＋密碼</summary>
+        <form id="emForm" autocomplete="on" style="margin-top:8px">
+          <h2 id="gateTitle" style="font-size:14px;margin:4px 0">登入</h2>
+          <label>Email</label><input id="g_email" type="email" autocomplete="username" autocapitalize="off">
+          <label style="margin-top:10px">密碼</label><input id="g_pw" type="password" autocomplete="current-password" placeholder="至少 6 個字">
+          <div id="g_pw2Box" class="hidden"><label style="margin-top:10px">再輸入一次密碼</label><input id="g_pw2" type="password" autocomplete="new-password"></div>
+          <div class="actions" style="justify-content:flex-start"><button type="submit" class="btn ghost" id="emBtn">登入</button></div>
+          <p style="margin:6px 0 0;font-size:13px;line-height:2"><a href="#" id="modeLink">第一次使用？設定我的密碼</a>　<a href="#" id="forgotLink">忘記密碼</a></p>
+        </form>
+      </details>
+    </div>
+    <div id="pendingBox" class="hidden">
+      <h2>⏳ 等待管理者同意</h2>
+      <p id="pendingText" style="margin:0 0 10px"></p>
+      <p style="margin:0;color:var(--muted);font-size:13px">管理者按下同意後，這個畫面會自動進入，不用重新整理。</p>
+      <p style="margin:12px 0 0;font-size:13px"><a href="#" id="pendingOut">換一個帳號</a></p>
+    </div>
   </div>
   <div id="app" class="hidden">
+  <div class="card hidden" id="reqCard" style="border-color:var(--amber);background:var(--amber-soft)">
+    <h2 style="color:var(--amber)">🔔 有人申請使用 <small id="reqCount" style="font-weight:400"></small></h2>
+    <div id="reqList"></div>
+    <div class="msg" id="reqMsg"></div>
+  </div>
 
   <div class="stats">
     <div class="stat"><b id="sMonth">–</b><span>本月 件數</span></div>
@@ -196,7 +211,7 @@
 
   <section class="card hidden" id="adminCard">
     <h2><span>成員管理 <small style="color:var(--muted);font-weight:400">（只有你看得到）</small></span></h2>
-    <p style="margin:0 0 10px;color:var(--muted);font-size:13px">輸入同事的 Email（Gmail 或醫院信箱都可以）加入名單。對方第一次打開網頁時，按「第一次使用」用這個信箱設定自己的密碼。只有名單裡的人能看到紀錄。</p>
+    <p style="margin:0 0 10px;color:var(--muted);font-size:13px">同事用 Gmail 登入後會出現在最上面的「有人申請使用」，按同意即可。也可以在這裡直接輸入信箱預先加入。只有名單裡的人能看到紀錄。</p>
     <div class="grid">
       <div><label>Email</label><input id="m_email" type="email" placeholder="name@example.com" autocapitalize="off"></div>
       <div><label>姓名（方便辨識）</label><input id="m_name" placeholder="王小明"></div>
@@ -231,6 +246,7 @@ let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup,
     getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where, getDocs, getDoc, arrayUnion, arrayRemove;
 const UA=navigator.userAgent||"";
 const IN_APP=/Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Threads|KAKAOTALK|Messenger/i.test(UA);
+if(/Line\//i.test(UA) && !/openExternalBrowser=1/.test(location.search)) location.replace(location.origin+location.pathname+"?openExternalBrowser=1");
 const watchdog=setTimeout(()=>{
   const s=document.getElementById("status");
   s.innerHTML='載入太久沒有回應，可能是網路不穩。 <button type="button" class="btn primary" style="padding:6px 14px;font-size:13px" onclick="location.reload()">重新整理</button>'; s.className="status warn";
@@ -259,7 +275,7 @@ const fields = ["room","patient","surname","age","from","to","desc","finder","ac
 function myName(){ return memberName || (me&&(me.displayName||me.email)) || ""; }
 function setMsg(id, text, kind){ const m=$(id); m.textContent=text; m.className="msg"+(kind?" "+kind:""); }
 function setStatus(text, warn){ const s=$("status"); s.textContent=text; s.className="status"+(warn?" warn":""); }
-function showGate(text, showLogin){ $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("gateText").className="msg"+(text?" err":""); }
+function showGate(text, showLogin){ $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("loginBox").classList.remove("hidden"); $("pendingBox").classList.add("hidden"); $("gateText").textContent=text; $("gateText").className="msg"+(text?" err":""); }
 
 document.querySelectorAll(".seg").forEach(el=>{
   el.addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b||b.classList.contains("add")) return; seg[el.dataset.field]=b.textContent; paintSeg(); });
@@ -463,17 +479,54 @@ $("exportBtn").onclick=()=>{
 };
 
 
+// ===== 申請／等待同意 =====
+let unsubPending=null;
+function enterPending(){
+  if(unsub){ unsub(); unsub=null; }
+  const email=(me.email||"").toLowerCase();
+  $("gate").classList.remove("hidden"); $("app").classList.add("hidden");
+  $("loginBox").classList.add("hidden"); $("pendingBox").classList.remove("hidden");
+  $("pendingText").textContent=`已用 ${email} 送出申請。`;
+  setDoc(doc(fs,"or_requests",email),{email,name:me.displayName||"",requestedAt:Date.now()},{merge:true})
+    .catch(e=>{ $("pendingText").textContent=`申請送不出去（${e.code}），請直接聯絡管理者，告訴他你的信箱：${email}`; });
+  if(unsubPending) unsubPending();
+  unsubPending=onSnapshot(doc(fs,"or_members",email), d=>{
+    if(d.exists()){ if(unsubPending){unsubPending();unsubPending=null;} memberName=d.data().name||memberName;
+      $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); setStatus("連線中…"); startListening(); }
+  }, ()=>{});
+}
+$("pendingOut").onclick=e=>{ e.preventDefault(); if(unsubPending){unsubPending();unsubPending=null;} signOut(auth); };
+
 // ===== 成員管理（只有管理者）=====
-let unsubMembers=null, members=[], pendingRemove=null;
+let unsubMembers=null, members=[], pendingRemove=null, unsubReq=null;
+function renderRequests(list){
+  $("reqCard").classList.toggle("hidden",!list.length);
+  $("reqCount").textContent=`（${list.length} 人）`;
+  const box=$("reqList"); box.innerHTML="";
+  list.forEach(r=>{
+    const row=el("div","rec"); row.style.cssText="cursor:default;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fffdf8";
+    const info=el("div",null,""); info.style.cssText="flex:1;min-width:160px;word-break:break-all";
+    info.appendChild(el("div",null,r.name||"（未提供姓名）")); info.appendChild(el("div","meta",r.email));
+    const nm=document.createElement("input"); nm.placeholder="顯示名稱"; nm.value=r.name||""; nm.style.cssText="width:110px;padding:6px 8px";
+    const ok=el("button","btn primary","同意"); ok.type="button"; ok.style.padding="6px 14px";
+    const no=el("button","btn ghost","拒絕"); no.type="button"; no.style.padding="6px 12px";
+    ok.onclick=async()=>{ ok.disabled=true; try{ await setDoc(doc(fs,"or_members",r.email),{name:nm.value.trim().slice(0,50),addedAt:Date.now()}); await deleteDoc(doc(fs,"or_requests",r.email)); setMsg("reqMsg",`已同意 ${nm.value.trim()||r.email}。`,"ok"); }catch(e){ ok.disabled=false; setMsg("reqMsg","失敗（"+e.code+"）","err"); } };
+    no.onclick=async()=>{ try{ await deleteDoc(doc(fs,"or_requests",r.email)); setMsg("reqMsg","已拒絕。","ok"); }catch(e){ setMsg("reqMsg","失敗（"+e.code+"）","err"); } };
+    row.append(info,nm,ok,no); box.appendChild(row);
+  });
+}
 function startAdmin(){
   $("adminCard").classList.remove("hidden");
+  if(!unsubReq) unsubReq=onSnapshot(collection(fs,"or_requests"), snap=>{
+    renderRequests(snap.docs.map(d=>Object.assign({email:d.id},d.data())).sort((a,b)=>(a.requestedAt||0)-(b.requestedAt||0)));
+  }, err=> setMsg("m_msg","讀不到申請名單（"+err.code+"），請確認 Firebase 規則已更新。","err"));
   if(unsubMembers) return;
   unsubMembers=onSnapshot(collection(fs,"or_members"), snap=>{
     members=snap.docs.map(d=>({email:d.id, name:(d.data()||{}).name||"", pin:(d.data()||{}).pin||""})).sort((a,b)=>a.email.localeCompare(b.email));
     renderMembers();
   }, err=> setMsg("m_msg","讀不到名單（"+err.code+"），請確認 Firebase 規則已更新。","err"));
 }
-function stopAdmin(){ $("adminCard").classList.add("hidden"); if(unsubMembers){unsubMembers();unsubMembers=null;} }
+function stopAdmin(){ $("adminCard").classList.add("hidden"); $("reqCard").classList.add("hidden"); if(unsubReq){unsubReq();unsubReq=null;} if(unsubMembers){unsubMembers();unsubMembers=null;} }
 function renderMembers(){
   if(members.some(m=>m.email===TEAM)){ deleteDoc(doc(fs,"or_members",TEAM)).then(()=>setMsg("m_msg","已停用舊的共用密碼（7184）登入。","ok")).catch(()=>{}); }
   const box=$("m_list"); box.innerHTML="";
@@ -538,7 +591,7 @@ $("forgotLink").onclick=async e=>{
 };
 $("loginBtn").onclick=async(ev)=>{
   ev.preventDefault();
-  if(IN_APP){ showGate("App 內建瀏覽器不能用 Google 登入，請改用 Safari 開啟。",true); return; }
+  if(IN_APP){ showGate("你是從 IG／FB 等 App 裡打開的，無法用 Google 登入。請按右上「⋯」選「在外部瀏覽器開啟」，或改用下方信箱＋密碼。",true); return; }
   try{ await signInWithPopup(auth,new GoogleAuthProvider()); }
   catch(e){
     if(e.code==="auth/popup-blocked"||e.code==="auth/operation-not-supported-in-this-environment"){ try{ await signInWithRedirect(auth,new GoogleAuthProvider()); return; }catch(e2){ e=e2; } }
@@ -558,7 +611,7 @@ function startListening(){
     setStatus("已連線・即時同步中"); render(); renderTypes();
   }, err=>{
     clearTimeout(timer);
-    if(err.code==="permission-denied") { gateNote=`這個信箱（${me.email}）還沒被加入名單，請聯絡管理者。`; signOut(auth); }
+    if(err.code==="permission-denied") { enterPending(); }
     else setStatus("連線中斷，請重新整理頁面。",true);
   });
 }
@@ -572,7 +625,7 @@ if(!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("
   onAuthStateChanged(auth, u=>{
     clearTimeout(watchdog); me=u; memberName="";
     const bar=$("authBar"); bar.innerHTML="";
-    if(!u){ stopAdmin(); if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate(gateNote,true); gateNote=""; return; }
+    if(!u){ if(unsubPending){unsubPending();unsubPending=null;} stopAdmin(); if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate(gateNote,true); gateNote=""; return; }
     bar.append(document.createTextNode(`已登入：${myName()}　`));
     const out=el("a",null,"登出"); out.href="#"; out.onclick=e=>{e.preventDefault(); signOut(auth);}; bar.append(out);
     $("gate").classList.add("hidden"); $("app").classList.remove("hidden");
