@@ -100,6 +100,11 @@
   .photoBtn{display:inline-block;margin-top:8px;font-size:14px;padding:8px 14px}
   #viewer img{max-width:100%;max-height:88vh;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.3)}
   .t-photo{background:#efe4d2;color:#8a6d50}
+  .segWrap{flex-wrap:wrap}
+  .segWrap button{flex:1 1 auto;min-width:30%}
+  .seg button.add{flex:0 0 auto;min-width:0;padding:9px 14px;border-style:dashed;color:var(--muted)}
+  .t-other{background:#e9e2f0;color:#7d6890}
+  #typeAddBox.hidden{display:none!important}
 </style>
 </head>
 <body>
@@ -123,11 +128,12 @@
   <div id="app" class="hidden">
 
   <div class="stats">
-    <div class="stat"><b id="sMiss">–</b><span>本月 未交班</span></div>
-    <div class="stat"><b id="sCross">–</b><span>本月 交錯班</span></div>
+    <div class="stat"><b id="sMonth">–</b><span>本月 件數</span></div>
+    <div class="stat"><b id="sTop" style="font-size:18px">–</b><span>本月 最多類型</span></div>
     <div class="stat"><b id="sRole">–</b><span>本月 流動／麻護</span></div>
     <div class="stat"><b id="sOpen">–</b><span>待追蹤（全部）</span></div>
   </div>
+  <div id="typeStats" class="meta" style="margin:-4px 2px 12px;line-height:1.9"></div>
 
   <form class="card" id="form" autocomplete="off">
     <h2><span id="formTitle">＋ 新增紀錄</span><button type="button" class="btn ghost hidden" id="cancelEdit">取消編輯</button></h2>
@@ -138,7 +144,8 @@
       <div><label>職類 <span class="req">*</span></label>
         <div class="seg" data-field="role"><button type="button">流動</button><button type="button">麻護</button></div></div>
       <div><label>問題類型 <span class="req">*</span></label>
-        <div class="seg" data-field="type"><button type="button">未交班</button><button type="button">交錯班</button></div></div>
+        <div class="seg segWrap" data-field="type" id="typeSeg"></div>
+        <div id="typeAddBox" class="hidden" style="display:flex;gap:6px;margin-top:6px"><input id="typeNew" maxlength="12" placeholder="新類型名稱，例：空針未收" style="flex:1"><button type="button" class="btn primary" id="typeAddOk" style="padding:8px 14px">加入</button></div></div>
       <div><label>房號</label><input id="f_room" placeholder="例：OR 5"></div>
       <div><label>手術術式</label><input id="f_patient" placeholder="例：疝氣修補術"></div>
       <div class="full"><label>病人資料 <span style="color:var(--rose);font-size:12px">（只填姓氏，勿填全名、病歷號）</span></label>
@@ -174,7 +181,7 @@
     <div class="filters">
       <input type="month" id="q_month" title="月份">
       <select id="q_role"><option value="">全部職類</option><option>流動</option><option>麻護</option></select>
-      <select id="q_type"><option value="">全部類型</option><option>未交班</option><option>交錯班</option></select>
+      <select id="q_type"><option value="">全部類型</option></select>
       <select id="q_status"><option value="">全部狀態</option><option>待追蹤</option><option>已完成</option></select>
       <input class="full" id="q_text" placeholder="搜尋姓名、房號、內容…" style="grid-column:1/-1">
     </div>
@@ -192,6 +199,12 @@
     <div class="actions"><button type="button" class="btn primary" id="m_add">加入名單</button></div>
     <div class="msg" id="m_msg"></div>
     <div id="m_list"></div>
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+      <label>問題類型</label>
+      <div id="typeAdmin" class="photos" style="gap:6px"></div>
+      <div style="display:flex;gap:8px;max-width:360px;margin-top:8px"><input id="typeAdminNew" maxlength="12" placeholder="新增類型" style="flex:1"><button type="button" class="btn primary" id="typeAdminAdd">新增</button></div>
+      <div class="msg" id="typeMsg"></div>
+    </div>
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
       <label>同事用的進入密碼</label>
       <div id="pinState" class="meta" style="margin:0 0 8px"></div>
@@ -216,7 +229,7 @@ const ADMIN="jane102310@gmail.com";
 const TEAM="orteam@koreabuy.app";
 const teamPw=pin=>"orpin-"+pin+"-handover";
 let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged,
-    getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where, getDocs;
+    getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where, getDocs, arrayUnion, arrayRemove;
 const UA=navigator.userAgent||"";
 const IN_APP=/Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Threads|KAKAOTALK|Messenger/i.test(UA);
 const watchdog=setTimeout(()=>{
@@ -227,7 +240,7 @@ try{
   ({ firebaseConfig } = await import("./firebase-config.js?v=2"));
   ({ initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`));
   ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
-  ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where, getDocs } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
+  ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where, getDocs, arrayUnion, arrayRemove } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
 }catch(e){
   clearTimeout(watchdog);
   const s=document.getElementById("status");
@@ -250,9 +263,40 @@ function setStatus(text, warn){ const s=$("status"); s.textContent=text; s.class
 function showGate(text, showLogin){ $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("gateText").className="msg"+(text?" err":""); }
 
 document.querySelectorAll(".seg").forEach(el=>{
-  el.addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; seg[el.dataset.field]=b.textContent; paintSeg(); });
+  el.addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b||b.classList.contains("add")) return; seg[el.dataset.field]=b.textContent; paintSeg(); });
 });
 function paintSeg(){ document.querySelectorAll(".seg").forEach(el=> el.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.textContent===seg[el.dataset.field]))); }
+
+// ===== 問題類型（可自行新增，管理者可移除）=====
+const DEFAULT_TYPES=["未交班","交錯班"];
+let types=[...DEFAULT_TYPES], unsubTypes=null;
+const typeDoc=()=>doc(fs,"or_records","_config_types");
+function typeClass(t){ return t==="未交班"?"t-miss":t==="交錯班"?"t-cross":"t-other"; }
+function renderTypes(){
+  const segEl=$("typeSeg"); segEl.innerHTML="";
+  const list=[...types]; if(seg.type && !list.includes(seg.type)) list.push(seg.type);
+  list.forEach(t=>{ const b=el("button",null,t); b.type="button"; segEl.appendChild(b); });
+  const add=el("button","add","＋ 新增"); add.type="button"; add.onclick=()=>{ $("typeAddBox").classList.toggle("hidden"); $("typeNew").focus(); };
+  segEl.appendChild(add); paintSeg();
+  const q=$("q_type"), cur=q.value; q.innerHTML='<option value="">全部類型</option>';
+  const all=[...new Set([...types,...records.map(r=>r.type).filter(Boolean)])];
+  all.forEach(t=>{ const o=document.createElement("option"); o.textContent=t; q.appendChild(o); }); q.value=cur;
+  if(typeof renderTypeAdmin==="function") renderTypeAdmin();
+}
+async function addType(t){
+  t=(t||"").trim().slice(0,12);
+  if(!t) return;
+  if(types.includes(t)){ seg.type=t; renderTypes(); return; }
+  try{ await setDoc(typeDoc(),{kind:"config",types:arrayUnion(...types,t)},{merge:true}); seg.type=t; }
+  catch(e){ setMsg("formMsg","新增類型失敗（"+(e.code||e.message)+"）","err"); }
+}
+$("typeAddOk").onclick=async()=>{ await addType($("typeNew").value); $("typeNew").value=""; $("typeAddBox").classList.add("hidden"); renderTypes(); };
+$("typeNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("typeAddOk").click(); } });
+function startTypes(){
+  if(unsubTypes) return;
+  unsubTypes=onSnapshot(typeDoc(), d=>{ const t=d.exists()?(d.data().types||[]):[]; types=t.length?t:[...DEFAULT_TYPES]; renderTypes(); }, ()=>{});
+}
+renderTypes();
 
 // ===== 照片 =====
 let photos=[], removedPhotoIds=[], photoLoadToken=0, photosLoading=false;
@@ -371,8 +415,11 @@ function filtered(){
 function el(tag,cls,text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
 function render(){
   const mon=records.filter(r=>(r.date||"").startsWith(thisMonth));
-  $("sMiss").textContent=mon.filter(r=>r.type==="未交班").length;
-  $("sCross").textContent=mon.filter(r=>r.type==="交錯班").length;
+  $("sMonth").textContent=mon.length;
+  const cnt={}; mon.forEach(r=>{ if(r.type) cnt[r.type]=(cnt[r.type]||0)+1; });
+  const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
+  $("sTop").textContent=sorted.length?sorted[0][0]:"–";
+  $("typeStats").textContent=sorted.length?"本月各類型："+sorted.map(([k,v])=>`${k} ${v}`).join("・"):"";
   $("sRole").textContent=mon.filter(r=>r.role==="流動").length+"／"+mon.filter(r=>r.role==="麻護").length;
   $("sOpen").textContent=records.filter(r=>(r.status||"待追蹤")==="待追蹤").length;
   const list=$("list"); list.innerHTML="";
@@ -382,7 +429,7 @@ function render(){
     const card=el("div","rec"), top=el("div","top");
     top.appendChild(el("span","date",`${r.date||""} ${r.shift||""}`));
     top.appendChild(el("span","tag t-role",r.role||""));
-    top.appendChild(el("span","tag "+(r.type==="未交班"?"t-miss":"t-cross"),r.type||""));
+    top.appendChild(el("span","tag "+typeClass(r.type),r.type||""));
     const st=r.status||"待追蹤"; top.appendChild(el("span","tag "+(st==="已完成"?"t-done":"t-open"),st));
     if(r.photoCount) top.appendChild(el("span","tag t-photo","📷 "+r.photoCount));
     if(r.room) top.appendChild(el("span",null,r.room));
@@ -446,6 +493,17 @@ function renderMembers(){
     box.appendChild(row);
   });
 }
+function renderTypeAdmin(){
+  const box=$("typeAdmin"); if(!box) return; box.innerHTML="";
+  types.forEach(t=>{
+    const chip=el("span","tag "+typeClass(t),t+" "); chip.style.fontSize="14px"; chip.style.padding="4px 6px 4px 12px";
+    const x=el("button",null,"×"); x.type="button"; x.title="移除"; x.style.cssText="border:0;background:transparent;color:inherit;font-size:16px;cursor:pointer;padding:0 4px";
+    x.onclick=async()=>{ if(types.length<=1){ setMsg("typeMsg","至少要保留一個類型。","err"); return; }
+      try{ await setDoc(typeDoc(),{kind:"config",types:types.filter(v=>v!==t)},{merge:true}); setMsg("typeMsg",`已移除「${t}」，舊紀錄不受影響。`,"ok"); }catch(e){ setMsg("typeMsg","移除失敗（"+e.code+"）","err"); } };
+    chip.appendChild(x); box.appendChild(chip);
+  });
+}
+$("typeAdminAdd").onclick=async()=>{ const v=$("typeAdminNew").value; await addType(v); $("typeAdminNew").value=""; setMsg("typeMsg",v.trim()?`已新增「${v.trim()}」。`:"","ok"); };
 $("pinSet").onclick=async()=>{
   const pin=$("pinNew").value.trim();
   if(pin.length<4){ setMsg("pinMsg","密碼至少 4 個字。","err"); return; }
@@ -503,12 +561,13 @@ $("loginBtn").onclick=async(ev)=>{
 
 function startListening(){
   if(unsub) unsub();
+  startTypes();
   const timer=setTimeout(()=>setStatus("資料暫時連不到，請檢查網路。",true),10000);
   unsub=onSnapshot(query(collection(fs,"or_records"),orderBy("date","desc"),limit(2000)), snap=>{
     clearTimeout(timer);
-    records=snap.docs.map(d=>Object.assign({id:d.id},d.data())).filter(r=>r.kind!=="photo");
+    records=snap.docs.map(d=>Object.assign({id:d.id},d.data())).filter(r=>r.kind!=="photo"&&r.kind!=="config");
     records.sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt||0)-(a.createdAt||0));
-    setStatus("已連線・即時同步中"); render();
+    setStatus("已連線・即時同步中"); render(); renderTypes();
   }, err=>{
     clearTimeout(timer);
     if(err.code==="permission-denied") { showGate(`這個帳號（${me.email}）沒有權限，請用密碼進入。`,true); }
