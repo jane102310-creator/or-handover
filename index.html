@@ -178,6 +178,10 @@ let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup,
     getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
 const UA=navigator.userAgent||"";
 const IN_APP=/Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Threads|KAKAOTALK|Messenger/i.test(UA);
+if(/Line\//i.test(UA) && !/openExternalBrowser=1/.test(location.search)){
+  // LINE：自動改用外部瀏覽器（Safari / Chrome）開啟
+  location.replace(location.origin+location.pathname+"?openExternalBrowser=1");
+}
 if(IN_APP){
   document.getElementById("inapp").classList.remove("hidden");
   document.getElementById("copyUrl").onclick=async()=>{
@@ -213,7 +217,7 @@ const fields = ["room","patient","from","to","desc","finder","action"];
 
 function setMsg(id, text, kind){ const m=$(id); m.textContent=text; m.className="msg"+(kind?" "+kind:""); }
 function setStatus(text, warn){ const s=$("status"); s.textContent=text; s.className="status"+(warn?" warn":""); }
-function showGate(text, showLogin){ $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("loginBtn").classList.toggle("hidden",!showLogin); }
+function showGate(text, showLogin){ if(IN_APP){ $("gate").classList.add("hidden"); $("app").classList.add("hidden"); return; } $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("loginBtn").classList.toggle("hidden",!showLogin); }
 
 document.querySelectorAll(".seg").forEach(el=>{
   el.addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; seg[el.dataset.field]=b.textContent; paintSeg(); });
