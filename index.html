@@ -6,19 +6,16 @@
 <title>刀房流動／麻護 未交班・交錯班紀錄</title>
 <style>
   :root{
-    --bg:#f5f7f6; --card:#fff; --ink:#1d2a26; --muted:#6b7a75; --line:#e2e8e5;
-    --teal:#0f766e; --teal-soft:#e0f2ef; --amber:#b45309; --amber-soft:#fef3c7;
-    --rose:#be123c; --rose-soft:#ffe4e6; --blue:#1d4ed8; --blue-soft:#e0e7ff;
-    --radius:14px;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{ --bg:#111816; --card:#1a2320; --ink:#e7efec; --muted:#93a39d; --line:#2c3833;
-      --teal:#5eead4; --teal-soft:#123a35; --amber:#fbbf24; --amber-soft:#3a2c0e;
-      --rose:#fb7185; --rose-soft:#3d1520; --blue:#93c5fd; --blue-soft:#18264a; }
+    --bg:#f8f1e5; --card:#fffaf2; --ink:#5a4636; --muted:#a08a76; --line:#eadcc8;
+    --teal:#c8a27c; --teal-soft:#f3e6d3; --amber:#c98a4b; --amber-soft:#fbecd6;
+    --rose:#c97b6b; --rose-soft:#f8e3dc; --blue:#8c7a5f; --blue-soft:#efe6d6;
+    --radius:20px;
+    color-scheme: light;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
-    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    font-family:"Rounded Mplus 1c","SF Pro Rounded",-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    background-image:radial-gradient(circle at 10% 0%,#fff6e8 0,transparent 40%),radial-gradient(circle at 90% 10%,#f6e7d3 0,transparent 35%);background-attachment:fixed;
     font-size:15px;line-height:1.5}
   .wrap{max-width:860px;margin:0 auto;padding:16px 14px 80px}
   header h1{font-size:20px;margin:4px 0 2px}
@@ -45,10 +42,8 @@
   .seg button{flex:1;padding:9px 6px;border-radius:10px;border:1px solid var(--line);background:var(--bg);
     color:var(--ink);font:inherit;cursor:pointer}
   .seg button.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:600}
-  @media (prefers-color-scheme: dark){.seg button.on{color:#0b1412}}
   .btn{font:inherit;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600}
   .btn.primary{background:var(--teal);color:#fff}
-  @media (prefers-color-scheme: dark){.btn.primary{color:#0b1412}}
   .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:500}
   .btn.danger{background:var(--rose-soft);color:var(--rose)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -76,6 +71,28 @@
   .dialog{background:var(--card);border-radius:var(--radius);padding:18px;max-width:340px;width:100%}
   .dialog p{margin:0 0 14px}
   .hidden{display:none}
+  /* 奶油風格 */
+  header h1{color:#6b4f3a;letter-spacing:.5px}
+  .card,.stat{box-shadow:0 4px 14px rgba(160,120,80,.08)}
+  .stat b{color:#b07d52}
+  input,select,textarea{background:#fdf6ec;border-color:#ecdcc6;border-radius:14px}
+  input:focus,select:focus,textarea:focus{outline-color:#d9b48f}
+  .seg button{border-radius:999px;background:#fdf6ec;border-color:#ecdcc6}
+  .seg button.on{background:#c09068;border-color:#c09068;color:#fff}
+  .btn{border-radius:999px}
+  .btn.primary{background:#b8875d;color:#fff;box-shadow:0 3px 8px rgba(184,135,93,.35)}
+  .btn.primary:active{transform:translateY(1px)}
+  .btn.ghost{background:#fffaf2;border-color:#e6d3bb;color:#7a5f48}
+  .rec{background:#fffdf8;border-color:#efe2d0;border-radius:16px}
+  .rec:hover{border-color:#d9b48f}
+  .t-miss{background:#f8e0d8;color:#b8695a}
+  .t-cross{background:#fbe9cf;color:#b67a3c}
+  .t-role{background:#efe4d2;color:#8a6d50}
+  .t-done{background:#e6eedc;color:#6f8a57}
+  .t-open{background:#fbf4ea;color:#a08a76;border-color:#eadcc8}
+  .msg.ok{color:#7c9a62}
+  .dialog{background:#fffaf2}
+  a{color:#a9805b}
 </style>
 </head>
 <body>
