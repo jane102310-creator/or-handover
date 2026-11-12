@@ -93,6 +93,13 @@
   .msg.ok{color:#7c9a62}
   .dialog{background:#fffaf2}
   a{color:#a9805b}
+  .photos{display:flex;gap:8px;flex-wrap:wrap}
+  .ph{position:relative;width:88px;height:88px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#fdf6ec;cursor:zoom-in}
+  .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .ph .x{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(90,70,54,.75);color:#fff;font-size:14px;line-height:24px;padding:0;cursor:pointer}
+  .photoBtn{display:inline-block;margin-top:8px;font-size:14px;padding:8px 14px}
+  #viewer img{max-width:100%;max-height:88vh;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.3)}
+  .t-photo{background:#efe4d2;color:#8a6d50}
 </style>
 </head>
 <body>
@@ -141,6 +148,10 @@
       <div><label>追蹤狀態</label>
         <div class="seg" data-field="status"><button type="button">待追蹤</button><button type="button">已完成</button></div></div>
       <div class="full"><label>處理結果</label><textarea id="f_action" placeholder="後續處理、是否已補交班"></textarea></div>
+      <div class="full"><label>照片（空針等證據，可多張）</label>
+        <div id="photoBox" class="photos"></div>
+        <label class="btn ghost photoBtn">📷 拍照／選照片<input type="file" id="f_photo" accept="image/*" multiple hidden></label>
+      </div>
     </div>
     <div class="actions">
       <button type="button" class="btn danger hidden" id="delBtn">刪除</button>
@@ -183,6 +194,7 @@
   </div>
 </div>
 
+<div class="overlay" id="viewer"><img id="viewerImg" alt="照片"></div>
 <div class="overlay" id="confirm">
   <div class="dialog">
     <p id="confirmText">確定要刪除這筆紀錄嗎？</p>
@@ -196,7 +208,7 @@ const ADMIN="jane102310@gmail.com";
 const TEAM="orteam@koreabuy.app";
 const teamPw=pin=>"orpin-"+pin+"-handover";
 let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged,
-    getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
+    getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where, getDocs;
 const UA=navigator.userAgent||"";
 const IN_APP=/Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Threads|KAKAOTALK|Messenger/i.test(UA);
 const watchdog=setTimeout(()=>{
@@ -207,7 +219,7 @@ try{
   ({ firebaseConfig } = await import("./firebase-config.js?v=2"));
   ({ initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`));
   ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
-  ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
+  ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where, getDocs } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
 }catch(e){
   clearTimeout(watchdog);
   const s=document.getElementById("status");
@@ -234,7 +246,48 @@ document.querySelectorAll(".seg").forEach(el=>{
 });
 function paintSeg(){ document.querySelectorAll(".seg").forEach(el=> el.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.textContent===seg[el.dataset.field]))); }
 
+// ===== 照片 =====
+let photos=[], removedPhotoIds=[], photoLoadToken=0, photosLoading=false;
+function renderPhotos(){
+  const box=$("photoBox"); box.innerHTML="";
+  photos.forEach((p,i)=>{
+    const d=el("div","ph"); const img=document.createElement("img"); img.src=p.data; img.alt="照片"; d.appendChild(img);
+    d.onclick=()=>{ $("viewerImg").src=p.data; $("viewer").classList.add("show"); };
+    const x=el("button","x","×"); x.type="button"; x.title="移除";
+    x.onclick=ev=>{ ev.stopPropagation(); if(p.id) removedPhotoIds.push(p.id); photos.splice(i,1); renderPhotos(); };
+    d.appendChild(x); box.appendChild(d);
+  });
+}
+$("viewer").onclick=()=> $("viewer").classList.remove("show");
+function loadImage(file){ return new Promise((res,rej)=>{ const u=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{ URL.revokeObjectURL(u); res(im); }; im.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error("無法讀取圖片")); }; im.src=u; }); }
+async function compress(file){
+  const im=await loadImage(file);
+  let max=1400, q=0.72, out="";
+  for(let t=0;t<6;t++){
+    const sc=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight));
+    const c=document.createElement("canvas"); c.width=Math.round(im.naturalWidth*sc); c.height=Math.round(im.naturalHeight*sc);
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+    out=c.toDataURL("image/jpeg",q);
+    if(out.length<700000) return out;
+    q=Math.max(0.45,q-0.1); max=Math.round(max*0.8);
+  }
+  return out;
+}
+$("f_photo").addEventListener("change", async ev=>{
+  const files=[...ev.target.files]; ev.target.value="";
+  if(!files.length) return;
+  if(photos.length+files.length>8){ setMsg("formMsg","每筆最多 8 張照片。","err"); return; }
+  setMsg("formMsg","處理照片中…");
+  for(const f of files){ try{ photos.push({data:await compress(f)}); }catch(e){ setMsg("formMsg","有一張照片讀取失敗。","err"); } }
+  renderPhotos(); setMsg("formMsg","");
+});
+async function photoDocsOf(recordId){
+  const snap=await getDocs(query(collection(fs,"or_records"),where("recordId","==",recordId)));
+  return snap.docs.filter(d=>(d.data()||{}).kind==="photo");
+}
+
 function resetForm(){
+  photos=[]; removedPhotoIds=[]; photoLoadToken++; photosLoading=false; renderPhotos();
   editingId=null; $("form").reset(); $("f_date").value=today;
   Object.assign(seg,{shift:"",role:"",type:"",status:"待追蹤"}); paintSeg();
   $("formTitle").textContent="＋ 新增紀錄"; $("saveBtn").textContent="儲存紀錄";
@@ -248,13 +301,22 @@ $("form").addEventListener("submit", async e=>{
   e.preventDefault();
   const date=$("f_date").value;
   if(!date||!seg.shift||!seg.role||!seg.type){ setMsg("formMsg","請填寫日期、班別、職類與問題類型。","err"); return; }
+  if(photosLoading){ setMsg("formMsg","照片還在載入，請稍等再儲存。","err"); return; }
   const data={date,shift:seg.shift,role:seg.role,type:seg.type,status:seg.status||"待追蹤",updatedAt:Date.now(),updatedBy:me.email};
   fields.forEach(f=> data[f]=$("f_"+f).value.trim().slice(0,2000));
   $("saveBtn").disabled=true;
   try{
-    if(editingId){ await updateDoc(doc(fs,"or_records",editingId),data); setMsg("formMsg","已更新。","ok"); }
-    else{ data.createdAt=Date.now(); data.createdBy=me.email; data.createdName=myName(); await addDoc(collection(fs,"or_records"),data); setMsg("formMsg","已儲存，大家都看得到了。","ok"); }
+    data.photoCount=photos.length;
+    let recordId=editingId;
+    if(editingId){ await updateDoc(doc(fs,"or_records",editingId),data); }
+    else{ data.createdAt=Date.now(); data.createdBy=me.email; data.createdName=myName(); recordId=(await addDoc(collection(fs,"or_records"),data)).id; }
+    const newOnes=photos.filter(p=>!p.id);
+    if(newOnes.length||removedPhotoIds.length) setMsg("formMsg","上傳照片中…");
+    for(const pid of removedPhotoIds){ await deleteDoc(doc(fs,"or_records",pid)); }
+    for(const p of newOnes){ await addDoc(collection(fs,"or_records"),{kind:"photo",recordId,data:p.data,createdAt:Date.now(),by:myName()}); }
+    const wasEdit=!!editingId;
     resetForm();
+    setMsg("formMsg", wasEdit?"已更新。":"已儲存，大家都看得到了。","ok");
   }catch(err){ setMsg("formMsg", err.code==="permission-denied" ? "沒有權限，請聯絡管理者把你加入名單。" : "儲存失敗，請再試一次。","err"); }
   finally{ $("saveBtn").disabled=false; }
 });
@@ -266,6 +328,12 @@ function startEdit(r){
   $("formTitle").textContent="✎ 編輯紀錄"; $("saveBtn").textContent="儲存修改";
   $("cancelEdit").classList.remove("hidden"); $("delBtn").classList.remove("hidden");
   setMsg("formMsg",""); $("form").scrollIntoView({behavior:"smooth"});
+  photos=[]; removedPhotoIds=[]; renderPhotos();
+  if(r.photoCount){
+    const tok=++photoLoadToken; photosLoading=true; setMsg("formMsg","載入照片中…");
+    photoDocsOf(r.id).then(ds=>{ if(tok!==photoLoadToken) return; photosLoading=false; photos=ds.map(d=>({id:d.id,data:d.data().data})); renderPhotos(); setMsg("formMsg",""); })
+      .catch(()=>{ if(tok===photoLoadToken){ photosLoading=false; setMsg("formMsg","照片載入失敗，請重新點開這筆紀錄。","err"); } });
+  }
 }
 $("delBtn").onclick=()=>{ if(editingId){ pendingRemove=null; $("confirmText").textContent="確定要刪除這筆紀錄嗎？"; $("cYes").textContent="刪除"; $("confirm").classList.add("show"); } };
 $("cNo").onclick=()=>{ pendingRemove=null; $("confirm").classList.remove("show"); };
@@ -274,7 +342,7 @@ $("cYes").onclick=async()=>{
   if(pendingRemove){ const em=pendingRemove; pendingRemove=null;
     try{ await deleteDoc(doc(fs,"or_members",em)); setMsg("m_msg","已移除。","ok"); }catch(e){ setMsg("m_msg","移除失敗（"+e.code+"）","err"); }
     return; }
-  try{ await deleteDoc(doc(fs,"or_records",editingId)); resetForm(); setMsg("formMsg","已刪除。","ok"); }
+  try{ const rid=editingId; for(const d of await photoDocsOf(rid)){ await deleteDoc(d.ref); } await deleteDoc(doc(fs,"or_records",rid)); resetForm(); setMsg("formMsg","已刪除。","ok"); }
   catch(err){ setMsg("formMsg","刪除失敗，可能沒有權限。","err"); }
 };
 ["q_month","q_role","q_type","q_status","q_text"].forEach(id=> $(id).addEventListener("input", render));
@@ -306,6 +374,7 @@ function render(){
     top.appendChild(el("span","tag t-role",r.role||""));
     top.appendChild(el("span","tag "+(r.type==="未交班"?"t-miss":"t-cross"),r.type||""));
     const st=r.status||"待追蹤"; top.appendChild(el("span","tag "+(st==="已完成"?"t-done":"t-open"),st));
+    if(r.photoCount) top.appendChild(el("span","tag t-photo","📷 "+r.photoCount));
     if(r.room) top.appendChild(el("span",null,r.room));
     card.appendChild(top);
     const who=[r.from&&("交："+r.from), r.to&&("接："+r.to), r.patient&&("病人／手術："+r.patient)].filter(Boolean).join("　");
@@ -318,9 +387,9 @@ function render(){
   });
 }
 $("copyBtn").onclick=async()=>{
-  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","病人／手術","情況說明","發現／通報者","處理結果","追蹤狀態"];
+  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","病人／手術","情況說明","發現／通報者","處理結果","追蹤狀態","照片數"];
   const clean=v=>String(v||"").replace(/[\t\r\n]+/g," ");
-  const lines=[head.join("\t")].concat(filtered().map(r=>[r.date,r.shift,r.role,r.type,r.room,r.from,r.to,r.patient,r.desc,r.finder,r.action,r.status||"待追蹤"].map(clean).join("\t")));
+  const lines=[head.join("\t")].concat(filtered().map(r=>[r.date,r.shift,r.role,r.type,r.room,r.from,r.to,r.patient,r.desc,r.finder,r.action,r.status||"待追蹤",r.photoCount||0].map(clean).join("\t")));
   try{ await navigator.clipboard.writeText(lines.join("\n")); setMsg("listMsg","已複製目前篩選的紀錄，可直接貼到 Excel 或 Google 試算表。","ok"); }
   catch(e){ setMsg("listMsg","無法複製，請改用電腦瀏覽器再試。","err"); }
 };
@@ -415,7 +484,7 @@ function startListening(){
   const timer=setTimeout(()=>setStatus("資料暫時連不到，請檢查網路。",true),10000);
   unsub=onSnapshot(query(collection(fs,"or_records"),orderBy("date","desc"),limit(2000)), snap=>{
     clearTimeout(timer);
-    records=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+    records=snap.docs.map(d=>Object.assign({id:d.id},d.data())).filter(r=>r.kind!=="photo");
     records.sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt||0)-(a.createdAt||0));
     setStatus("已連線・即時同步中"); render();
   }, err=>{
