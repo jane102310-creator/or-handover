@@ -152,10 +152,24 @@
 </div>
 
 <script type="module">
-import { firebaseConfig } from "./firebase-config.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const V="10.12.2";
+let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged,
+    getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
+const watchdog=setTimeout(()=>{
+  const s=document.getElementById("status");
+  s.textContent="載入太久沒有回應。請按右上「⋯」用 Safari 或 Chrome 開啟此網址，或檢查網路後重新整理。"; s.className="status warn";
+},10000);
+try{
+  ({ firebaseConfig } = await import("./firebase-config.js?v=2"));
+  ({ initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`));
+  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
+  ({ getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
+}catch(e){
+  clearTimeout(watchdog);
+  const s=document.getElementById("status");
+  s.textContent="無法載入 Firebase（"+(e&&e.message||e)+"）。請檢查網路，或改用 Safari／Chrome 開啟。"; s.className="status warn";
+  throw e;
+}
 
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2,"0");
@@ -263,7 +277,14 @@ $("copyBtn").onclick=async()=>{
   catch(e){ setMsg("listMsg","無法複製，請改用電腦瀏覽器再試。","err"); }
 };
 
-$("loginBtn").onclick=async()=>{ try{ await signInWithPopup(auth,new GoogleAuthProvider()); }catch(e){ showGate("登入失敗："+(e.code||e.message),true); } };
+$("loginBtn").onclick=async()=>{
+  try{ await signInWithPopup(auth,new GoogleAuthProvider()); }
+  catch(e){
+    if(e.code==="auth/popup-blocked"||e.code==="auth/operation-not-supported-in-this-environment"){ try{ await signInWithRedirect(auth,new GoogleAuthProvider()); return; }catch(e2){ e=e2; } }
+    if(e.code==="auth/popup-closed-by-user"||e.code==="auth/cancelled-popup-request") return;
+    showGate("登入失敗（"+(e.code||e.message)+"）。若在 App 內開啟，請改用 Safari 或 Chrome。",true);
+  }
+};
 
 function startListening(){
   if(unsub) unsub();
@@ -281,13 +302,13 @@ function startListening(){
 }
 
 if(!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("貼上")){
-  setStatus("尚未設定 Firebase：請在 firebase-config.js 貼上設定。",true);
+  clearTimeout(watchdog); setStatus("尚未設定 Firebase：請在 firebase-config.js 貼上設定。",true);
   showGate("網站還沒接上 Firebase，請管理者完成設定。",false);
 }else{
   const app=initializeApp(firebaseConfig);
   auth=getAuth(app); fs=getFirestore(app);
   onAuthStateChanged(auth, u=>{
-    me=u;
+    clearTimeout(watchdog); me=u;
     const bar=$("authBar"); bar.innerHTML="";
     if(!u){ if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate("用 Google 帳號登入後才能查看與登打紀錄。",true); return; }
     bar.append(document.createTextNode(`已登入：${u.displayName||u.email}　`));
