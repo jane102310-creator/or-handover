@@ -140,10 +140,10 @@
       <div><label>問題類型 <span class="req">*</span></label>
         <div class="seg" data-field="type"><button type="button">未交班</button><button type="button">交錯班</button></div></div>
       <div><label>房號</label><input id="f_room" placeholder="例：OR 5"></div>
-      <div><label>病人／手術</label><input id="f_patient" placeholder="病歷號或術式"></div>
+      <div><label>手術術式 <span style="color:var(--rose);font-size:12px">（請勿填病歷號、姓名）</span></label><input id="f_patient" placeholder="例：疝氣修補術"></div>
       <div><label>交班人員（應交班者）</label><input id="f_from"></div>
       <div><label>接班人員</label><input id="f_to"></div>
-      <div class="full"><label>情況說明</label><textarea id="f_desc" placeholder="發生什麼事、漏交或交錯的內容"></textarea></div>
+      <div class="full"><label>情況說明</label><textarea id="f_desc" placeholder="發生什麼事、漏交或交錯的內容（勿寫病歷號）"></textarea></div>
       <div><label>發現／通報者</label><input id="f_finder"></div>
       <div><label>追蹤狀態</label>
         <div class="seg" data-field="status"><button type="button">待追蹤</button><button type="button">已完成</button></div></div>
@@ -153,6 +153,7 @@
         <label class="btn ghost photoBtn">📷 拍照／選照片<input type="file" id="f_photo" accept="image/*" multiple hidden></label>
       </div>
     </div>
+    <p style="margin:12px 0 0;font-size:12.5px;color:var(--rose);background:var(--rose-soft);padding:8px 12px;border-radius:12px">⚠️ 為保護病人隱私：請勿填寫病歷號、病人姓名；照片也不要拍到病人臉部、手圈或病歷。</p>
     <div class="actions">
       <button type="button" class="btn danger hidden" id="delBtn">刪除</button>
       <button type="submit" class="btn primary" id="saveBtn">儲存紀錄</button>
@@ -377,7 +378,7 @@ function render(){
     if(r.photoCount) top.appendChild(el("span","tag t-photo","📷 "+r.photoCount));
     if(r.room) top.appendChild(el("span",null,r.room));
     card.appendChild(top);
-    const who=[r.from&&("交："+r.from), r.to&&("接："+r.to), r.patient&&("病人／手術："+r.patient)].filter(Boolean).join("　");
+    const who=[r.from&&("交："+r.from), r.to&&("接："+r.to), r.patient&&("術式："+r.patient)].filter(Boolean).join("　");
     if(who) card.appendChild(el("div","who",who));
     if(r.desc) card.appendChild(el("div","desc",r.desc));
     if(r.action) card.appendChild(el("div","desc","處理："+r.action));
@@ -387,7 +388,7 @@ function render(){
   });
 }
 $("copyBtn").onclick=async()=>{
-  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","病人／手術","情況說明","發現／通報者","處理結果","追蹤狀態","照片數"];
+  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","手術術式","情況說明","發現／通報者","處理結果","追蹤狀態","照片數"];
   const clean=v=>String(v||"").replace(/[\t\r\n]+/g," ");
   const lines=[head.join("\t")].concat(filtered().map(r=>[r.date,r.shift,r.role,r.type,r.room,r.from,r.to,r.patient,r.desc,r.finder,r.action,r.status||"待追蹤",r.photoCount||0].map(clean).join("\t")));
   try{ await navigator.clipboard.writeText(lines.join("\n")); setMsg("listMsg","已複製目前篩選的紀錄，可直接貼到 Excel 或 Google 試算表。","ok"); }
