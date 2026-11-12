@@ -571,8 +571,21 @@ function renderMembers(){
   box.appendChild(el("div","meta",`目前名單（${members.length} 人）`));
   members.filter(m=>m.email!==TEAM).forEach(m=>{
     const row=el("div","rec"); row.style.cursor="default"; row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
-    const t=el("div",null,(m.name?m.name+"　":"")+m.email); t.style.flex="1"; t.style.wordBreak="break-all";
+    row.style.flexWrap="wrap";
+    const t=el("div",null,""); t.style.cssText="flex:1;min-width:150px;word-break:break-all";
+    const nmShow=el("div",null,m.name||"（未命名）"); t.appendChild(nmShow); t.appendChild(el("div","meta",m.email));
+    const nmEdit=document.createElement("input"); nmEdit.value=m.name||""; nmEdit.maxLength=50; nmEdit.style.cssText="display:none;padding:6px 8px;margin:2px 0";
+    t.insertBefore(nmEdit,t.lastChild);
     row.appendChild(t);
+    const ed=el("button","btn ghost","改名"); ed.type="button"; ed.style.cssText="padding:6px 10px;font-size:13px";
+    ed.onclick=async()=>{
+      if(nmEdit.style.display==="none"){ nmEdit.style.display="block"; nmShow.style.display="none"; ed.textContent="儲存"; ed.className="btn primary"; nmEdit.focus(); return; }
+      const v=nmEdit.value.trim().slice(0,50); ed.disabled=true;
+      try{ await setDoc(doc(fs,"or_members",m.email),{name:v},{merge:true}); setMsg("m_msg",`已改名為「${v||"（未命名）"}」。`,"ok"); }
+      catch(e){ ed.disabled=false; setMsg("m_msg","改名失敗（"+e.code+"）","err"); }
+    };
+    nmEdit.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); ed.click(); } });
+    row.appendChild(ed);
     if(m.email===ADMIN){ row.appendChild(el("span","tag t-done","管理者・可匯出")); }
     if(m.email!==ADMIN){
       const ex=el("button","btn "+(m.canExport?"primary":"ghost"),m.canExport?"✓ 可匯出":"不可匯出"); ex.type="button"; ex.style.cssText="padding:6px 10px;font-size:13px";
