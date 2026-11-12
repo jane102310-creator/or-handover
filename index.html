@@ -170,7 +170,7 @@
 
   <section class="card">
     <h2><span>紀錄列表 <small id="count" style="color:var(--muted);font-weight:400"></small></span>
-      <button type="button" class="btn ghost" id="copyBtn">複製成表格</button></h2>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn primary" id="exportBtn">⬇︎ 匯出 Excel</button><button type="button" class="btn ghost" id="copyBtn">複製</button></span></h2>
     <div class="filters">
       <input type="month" id="q_month" title="月份">
       <select id="q_role"><option value="">全部職類</option><option>流動</option><option>麻護</option></select>
@@ -397,12 +397,36 @@ function render(){
     list.appendChild(card);
   });
 }
+const EXPORT_HEAD=["日期","班別","職類","問題類型","房號","交班人員","接班人員","手術術式","性別","姓氏","年齡","情況說明","發現／通報者","處理結果","追蹤狀態","照片數","登錄者"];
+function exportRows(){ return filtered().map(r=>[r.date||"",r.shift||"",r.role||"",r.type||"",r.room||"",r.from||"",r.to||"",r.patient||"",r.gender||"",r.surname||"",r.age?Number(r.age):"",r.desc||"",r.finder||"",r.action||"",r.status||"待追蹤",r.photoCount||0,r.createdName||""]); }
 $("copyBtn").onclick=async()=>{
-  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","手術術式","性別","姓氏","年齡","情況說明","發現／通報者","處理結果","追蹤狀態","照片數"];
-  const clean=v=>String(v||"").replace(/[\t\r\n]+/g," ");
-  const lines=[head.join("\t")].concat(filtered().map(r=>[r.date,r.shift,r.role,r.type,r.room,r.from,r.to,r.patient,r.gender,r.surname,r.age,r.desc,r.finder,r.action,r.status||"待追蹤",r.photoCount||0].map(clean).join("\t")));
+  const clean=v=>String(v??"").replace(/[\t\r\n]+/g," ");
+  const lines=[EXPORT_HEAD.join("\t")].concat(exportRows().map(r=>r.map(clean).join("\t")));
   try{ await navigator.clipboard.writeText(lines.join("\n")); setMsg("listMsg","已複製目前篩選的紀錄，可直接貼到 Excel 或 Google 試算表。","ok"); }
-  catch(e){ setMsg("listMsg","無法複製，請改用電腦瀏覽器再試。","err"); }
+  catch(e){ setMsg("listMsg","無法複製，請改用「匯出 Excel」。","err"); }
+};
+function loadScript(src){ return new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=res; sc.onerror=rej; document.head.appendChild(sc); }); }
+function saveBlob(blob,name){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500); }
+$("exportBtn").onclick=async()=>{
+  const rows=exportRows();
+  if(!rows.length){ setMsg("listMsg","目前篩選沒有紀錄可以匯出。","err"); return; }
+  const m=$("q_month").value, name=`刀房交班紀錄_${m||"全部"}`;
+  $("exportBtn").disabled=true; setMsg("listMsg","產生檔案中…");
+  try{
+    if(!window.XLSX) await loadScript("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js");
+    const ws=XLSX.utils.aoa_to_sheet([EXPORT_HEAD,...rows]);
+    ws["!cols"]=[12,6,6,8,7,10,10,16,5,5,5,40,12,30,8,6,10].map(w=>({wch:w}));
+    ws["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length,c:EXPORT_HEAD.length-1}})};
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"紀錄");
+    const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    saveBlob(new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),name+".xlsx");
+    setMsg("listMsg",`已匯出 ${rows.length} 筆（依目前篩選）。照片不會放進 Excel，請在網頁上查看。`,"ok");
+  }catch(e){
+    const esc=v=>{ const t=String(v??""); return /[",\n\r]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+    const csv="\ufeff"+[EXPORT_HEAD,...rows].map(r=>r.map(esc).join(",")).join("\r\n");
+    saveBlob(new Blob([csv],{type:"text/csv;charset=utf-8"}),name+".csv");
+    setMsg("listMsg",`已匯出 ${rows.length} 筆（CSV 格式，可用 Excel 開啟）。`,"ok");
+  }finally{ $("exportBtn").disabled=false; }
 };
 
 
