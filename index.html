@@ -159,7 +159,7 @@
     <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
       <label>同事用的進入密碼</label>
       <div id="pinState" class="meta" style="margin:0 0 8px"></div>
-      <div style="display:flex;gap:8px;max-width:320px"><input id="pinNew" inputmode="numeric" placeholder="例：7184" style="flex:1"><button type="button" class="btn primary" id="pinSet">設定</button></div>
+      <div style="display:flex;gap:8px;max-width:320px"><input id="pinNew" inputmode="numeric" placeholder="輸入新密碼" autocomplete="off" style="flex:1"><button type="button" class="btn primary" id="pinSet">設定</button></div>
       <div class="msg" id="pinMsg"></div>
     </div>
   </section>
@@ -178,7 +178,7 @@ const V="10.12.2";
 const ADMIN="jane102310@gmail.com";
 const TEAM="orteam@koreabuy.app";
 const teamPw=pin=>"orpin-"+pin+"-handover";
-let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged,
+let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged,
     getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
 const UA=navigator.userAgent||"";
 const IN_APP=/Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Threads|KAKAOTALK|Messenger/i.test(UA);
@@ -189,7 +189,7 @@ const watchdog=setTimeout(()=>{
 try{
   ({ firebaseConfig } = await import("./firebase-config.js?v=2"));
   ({ initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`));
-  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
+  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
   ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
 }catch(e){
   clearTimeout(watchdog);
@@ -315,14 +315,15 @@ function startAdmin(){
   $("adminCard").classList.remove("hidden");
   if(unsubMembers) return;
   unsubMembers=onSnapshot(collection(fs,"or_members"), snap=>{
-    members=snap.docs.map(d=>({email:d.id, name:(d.data()||{}).name||""})).sort((a,b)=>a.email.localeCompare(b.email));
+    members=snap.docs.map(d=>({email:d.id, name:(d.data()||{}).name||"", pin:(d.data()||{}).pin||""})).sort((a,b)=>a.email.localeCompare(b.email));
     renderMembers();
   }, err=> setMsg("m_msg","讀不到名單（"+err.code+"），請確認 Firebase 規則已更新。","err"));
 }
 function stopAdmin(){ $("adminCard").classList.add("hidden"); if(unsubMembers){unsubMembers();unsubMembers=null;} }
 function renderMembers(){
-  const hasTeam=members.some(m=>m.email===TEAM);
-  $("pinState").textContent=hasTeam?"✅ 已啟用：同事輸入密碼就能進入。":"尚未設定：輸入密碼後按「設定」，同事就能用密碼進入。";
+  const team=members.find(m=>m.email===TEAM);
+  $("pinState").textContent=team ? (team.pin?`✅ 目前密碼：${team.pin}（要更改就輸入新密碼按「更改」）`:"✅ 已啟用（要更改就輸入新密碼按「更改」）") : "尚未設定：輸入密碼後按「設定」，同事就能用密碼進入。";
+  $("pinSet").textContent=team?"更改":"設定";
   const box=$("m_list"); box.innerHTML="";
   box.appendChild(el("div","meta",`目前名單（${members.length} 人）`));
   members.filter(m=>m.email!==TEAM).forEach(m=>{
@@ -340,21 +341,27 @@ function renderMembers(){
 $("pinSet").onclick=async()=>{
   const pin=$("pinNew").value.trim();
   if(pin.length<4){ setMsg("pinMsg","密碼至少 4 個字。","err"); return; }
-  $("pinSet").disabled=true; setMsg("pinMsg","設定中…");
+  const team=members.find(m=>m.email===TEAM), oldPin=team&&team.pin;
+  if(oldPin===pin){ setMsg("pinMsg","新密碼跟目前一樣。","err"); return; }
+  $("pinSet").disabled=true; setMsg("pinMsg","處理中…");
   try{
     const a2=getAuth(initializeApp(firebaseConfig,"setup-"+Date.now()));
-    try{ await createUserWithEmailAndPassword(a2,TEAM,teamPw(pin)); }
-    catch(e){
-      if(e.code!=="auth/email-already-in-use") throw e;
-      try{ await signInWithEmailAndPassword(a2,TEAM,teamPw(pin)); }
-      catch(e2){ throw {code:"pin-mismatch"}; }
+    if(oldPin){
+      const cred=await signInWithEmailAndPassword(a2,TEAM,teamPw(oldPin));
+      await updatePassword(cred.user,teamPw(pin));
+    }else{
+      try{ await createUserWithEmailAndPassword(a2,TEAM,teamPw(pin)); }
+      catch(e){
+        if(e.code!=="auth/email-already-in-use") throw e;
+        try{ await signInWithEmailAndPassword(a2,TEAM,teamPw(pin)); }catch(e2){ throw {code:"pin-mismatch"}; }
+      }
     }
     await signOut(a2);
-    await setDoc(doc(fs,"or_members",TEAM),{name:"同仁（密碼）",addedAt:Date.now()});
-    $("pinNew").value=""; setMsg("pinMsg",`完成！同事輸入 ${pin} 就能進入。`,"ok");
+    await setDoc(doc(fs,"or_members",TEAM),{name:"同仁（密碼）",pin,updatedAt:Date.now()});
+    $("pinNew").value=""; setMsg("pinMsg",oldPin?`已更改，之後請用新密碼 ${pin} 進入。`:`完成！同事輸入 ${pin} 就能進入。`,"ok");
   }catch(e){
-    setMsg("pinMsg", e.code==="pin-mismatch" ? "團隊帳號已用別的密碼建立過；要換密碼請告訴 Claude 協助。" :
-      e.code==="auth/operation-not-allowed" ? "Firebase 尚未開啟「電子郵件/密碼」登入方式。" : "設定失敗（"+(e.code||e.message)+"）","err");
+    setMsg("pinMsg", e.code==="pin-mismatch" ? "團隊帳號已用別的密碼建立過：請到 Firebase → Authentication → 使用者，刪掉 orteam@koreabuy.app 後再按一次。" :
+      e.code==="auth/operation-not-allowed" ? "Firebase 尚未開啟「電子郵件/密碼」登入方式。" : "失敗（"+(e.code||e.message)+"）","err");
   }finally{ $("pinSet").disabled=false; }
 };
 $("m_add").onclick=async()=>{
