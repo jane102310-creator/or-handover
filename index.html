@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>刀房流動／麻護 未交班・交錯班紀錄</title>
+<style>
+  :root{
+    --bg:#f5f7f6; --card:#fff; --ink:#1d2a26; --muted:#6b7a75; --line:#e2e8e5;
+    --teal:#0f766e; --teal-soft:#e0f2ef; --amber:#b45309; --amber-soft:#fef3c7;
+    --rose:#be123c; --rose-soft:#ffe4e6; --blue:#1d4ed8; --blue-soft:#e0e7ff;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#111816; --card:#1a2320; --ink:#e7efec; --muted:#93a39d; --line:#2c3833;
+      --teal:#5eead4; --teal-soft:#123a35; --amber:#fbbf24; --amber-soft:#3a2c0e;
+      --rose:#fb7185; --rose-soft:#3d1520; --blue:#93c5fd; --blue-soft:#18264a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    font-size:15px;line-height:1.5}
+  .wrap{max-width:860px;margin:0 auto;padding:16px 14px 80px}
+  header h1{font-size:20px;margin:4px 0 2px}
+  header p{margin:0;color:var(--muted);font-size:13px}
+  .status{font-size:12px;color:var(--muted);margin-top:6px}
+  .status.warn{color:var(--amber)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px}
+  .stat b{display:block;font-size:24px;line-height:1.2}
+  .stat span{font-size:12px;color:var(--muted)}
+  @media (max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  .card h2{font-size:16px;margin:0 0 10px;display:flex;justify-content:space-between;align-items:center}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .full{grid-column:1/-1}
+  @media (max-width:560px){.grid{grid-template-columns:1fr}}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+  label .req{color:var(--rose)}
+  input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);
+    border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+  textarea{min-height:72px;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);outline-offset:-1px}
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;padding:9px 6px;border-radius:10px;border:1px solid var(--line);background:var(--bg);
+    color:var(--ink);font:inherit;cursor:pointer}
+  .seg button.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:600}
+  @media (prefers-color-scheme: dark){.seg button.on{color:#0b1412}}
+  .btn{font:inherit;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600}
+  .btn.primary{background:var(--teal);color:#fff}
+  @media (prefers-color-scheme: dark){.btn.primary{color:#0b1412}}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:500}
+  .btn.danger{background:var(--rose-soft);color:var(--rose)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+  .filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+  @media (max-width:560px){.filters{grid-template-columns:1fr 1fr}}
+  .rec{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;cursor:pointer}
+  .rec:hover{border-color:var(--teal)}
+  .rec .top{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .tag{font-size:12px;padding:2px 8px;border-radius:999px;font-weight:600}
+  .t-miss{background:var(--rose-soft);color:var(--rose)}
+  .t-cross{background:var(--amber-soft);color:var(--amber)}
+  .t-role{background:var(--blue-soft);color:var(--blue)}
+  .t-done{background:var(--teal-soft);color:var(--teal)}
+  .t-open{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+  .rec .date{font-weight:600;margin-right:4px}
+  .rec .who{margin-top:4px;font-size:14px}
+  .rec .desc{margin-top:4px;color:var(--muted);font-size:13px;white-space:pre-wrap}
+  .rec .meta{margin-top:6px;font-size:12px;color:var(--muted)}
+  .empty{text-align:center;color:var(--muted);padding:24px 0}
+  .msg{font-size:13px;margin-top:8px}
+  .msg.err{color:var(--rose)} .msg.ok{color:var(--teal)}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+  .overlay.show{display:flex}
+  .dialog{background:var(--card);border-radius:var(--radius);padding:18px;max-width:340px;width:100%}
+  .dialog p{margin:0 0 14px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>刀房流動／麻護 未交班・交錯班紀錄</h1>
+    <p>大家共用同一份紀錄，新增後所有人即時看得到。</p>
+    <div class="status" id="status">連線中…</div>
+    <div class="status" id="authBar"></div>
+  </header>
+
+  <div class="card hidden" id="gate">
+    <h2>請先登入</h2>
+    <p id="gateText" style="margin:0 0 12px;color:var(--muted)">用 Google 帳號登入後才能查看與登打紀錄。</p>
+    <button type="button" class="btn primary" id="loginBtn">使用 Google 登入</button>
+  </div>
+  <div id="app" class="hidden">
+
+  <div class="stats">
+    <div class="stat"><b id="sMiss">–</b><span>本月 未交班</span></div>
+    <div class="stat"><b id="sCross">–</b><span>本月 交錯班</span></div>
+    <div class="stat"><b id="sRole">–</b><span>本月 流動／麻護</span></div>
+    <div class="stat"><b id="sOpen">–</b><span>待追蹤（全部）</span></div>
+  </div>
+
+  <form class="card" id="form" autocomplete="off">
+    <h2><span id="formTitle">＋ 新增紀錄</span><button type="button" class="btn ghost hidden" id="cancelEdit">取消編輯</button></h2>
+    <div class="grid">
+      <div><label>日期 <span class="req">*</span></label><input type="date" id="f_date" required></div>
+      <div><label>班別 <span class="req">*</span></label>
+        <div class="seg" data-field="shift"><button type="button">白班</button><button type="button">小夜</button><button type="button">大夜</button></div></div>
+      <div><label>職類 <span class="req">*</span></label>
+        <div class="seg" data-field="role"><button type="button">流動</button><button type="button">麻護</button></div></div>
+      <div><label>問題類型 <span class="req">*</span></label>
+        <div class="seg" data-field="type"><button type="button">未交班</button><button type="button">交錯班</button></div></div>
+      <div><label>房號</label><input id="f_room" placeholder="例：OR 5"></div>
+      <div><label>病人／手術</label><input id="f_patient" placeholder="病歷號或術式"></div>
+      <div><label>交班人員（應交班者）</label><input id="f_from"></div>
+      <div><label>接班人員</label><input id="f_to"></div>
+      <div class="full"><label>情況說明</label><textarea id="f_desc" placeholder="發生什麼事、漏交或交錯的內容"></textarea></div>
+      <div><label>發現／通報者</label><input id="f_finder"></div>
+      <div><label>追蹤狀態</label>
+        <div class="seg" data-field="status"><button type="button">待追蹤</button><button type="button">已完成</button></div></div>
+      <div class="full"><label>處理結果</label><textarea id="f_action" placeholder="後續處理、是否已補交班"></textarea></div>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn danger hidden" id="delBtn">刪除</button>
+      <button type="submit" class="btn primary" id="saveBtn">儲存紀錄</button>
+    </div>
+    <div class="msg" id="formMsg"></div>
+  </form>
+
+  <section class="card">
+    <h2><span>紀錄列表 <small id="count" style="color:var(--muted);font-weight:400"></small></span>
+      <button type="button" class="btn ghost" id="copyBtn">複製成表格</button></h2>
+    <div class="filters">
+      <input type="month" id="q_month" title="月份">
+      <select id="q_role"><option value="">全部職類</option><option>流動</option><option>麻護</option></select>
+      <select id="q_type"><option value="">全部類型</option><option>未交班</option><option>交錯班</option></select>
+      <select id="q_status"><option value="">全部狀態</option><option>待追蹤</option><option>已完成</option></select>
+      <input class="full" id="q_text" placeholder="搜尋姓名、房號、內容…" style="grid-column:1/-1">
+    </div>
+    <div id="list"><div class="empty">載入中…</div></div>
+    <div class="msg" id="listMsg"></div>
+  </section>
+  </div>
+</div>
+
+<div class="overlay" id="confirm">
+  <div class="dialog">
+    <p id="confirmText">確定要刪除這筆紀錄嗎？</p>
+    <div class="actions"><button class="btn ghost" id="cNo">取消</button><button class="btn danger" id="cYes">刪除</button></div>
+  </div>
+</div>
+
+<script type="module">
+import { firebaseConfig } from "./firebase-config.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2,"0");
+const now = new Date();
+const today = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+const thisMonth = today.slice(0,7);
+let fs=null, auth=null, me=null, records=[], editingId=null, unsub=null;
+const seg = { shift:"", role:"", type:"", status:"待追蹤" };
+const fields = ["room","patient","from","to","desc","finder","action"];
+
+function setMsg(id, text, kind){ const m=$(id); m.textContent=text; m.className="msg"+(kind?" "+kind:""); }
+function setStatus(text, warn){ const s=$("status"); s.textContent=text; s.className="status"+(warn?" warn":""); }
+function showGate(text, showLogin){ $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("loginBtn").classList.toggle("hidden",!showLogin); }
+
+document.querySelectorAll(".seg").forEach(el=>{
+  el.addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; seg[el.dataset.field]=b.textContent; paintSeg(); });
+});
+function paintSeg(){ document.querySelectorAll(".seg").forEach(el=> el.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.textContent===seg[el.dataset.field]))); }
+
+function resetForm(){
+  editingId=null; $("form").reset(); $("f_date").value=today;
+  Object.assign(seg,{shift:"",role:"",type:"",status:"待追蹤"}); paintSeg();
+  $("formTitle").textContent="＋ 新增紀錄"; $("saveBtn").textContent="儲存紀錄";
+  $("cancelEdit").classList.add("hidden"); $("delBtn").classList.add("hidden");
+}
+resetForm();
+$("q_month").value=thisMonth;
+$("cancelEdit").onclick=()=>{ resetForm(); setMsg("formMsg",""); };
+
+$("form").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const date=$("f_date").value;
+  if(!date||!seg.shift||!seg.role||!seg.type){ setMsg("formMsg","請填寫日期、班別、職類與問題類型。","err"); return; }
+  const data={date,shift:seg.shift,role:seg.role,type:seg.type,status:seg.status||"待追蹤",updatedAt:Date.now(),updatedBy:me.email};
+  fields.forEach(f=> data[f]=$("f_"+f).value.trim().slice(0,2000));
+  $("saveBtn").disabled=true;
+  try{
+    if(editingId){ await updateDoc(doc(fs,"or_records",editingId),data); setMsg("formMsg","已更新。","ok"); }
+    else{ data.createdAt=Date.now(); data.createdBy=me.email; data.createdName=me.displayName||""; await addDoc(collection(fs,"or_records"),data); setMsg("formMsg","已儲存，大家都看得到了。","ok"); }
+    resetForm();
+  }catch(err){ setMsg("formMsg", err.code==="permission-denied" ? "沒有權限，請聯絡管理者把你加入名單。" : "儲存失敗，請再試一次。","err"); }
+  finally{ $("saveBtn").disabled=false; }
+});
+
+function startEdit(r){
+  editingId=r.id; $("f_date").value=r.date||today;
+  fields.forEach(f=> $("f_"+f).value=r[f]||"");
+  Object.assign(seg,{shift:r.shift||"",role:r.role||"",type:r.type||"",status:r.status||"待追蹤"}); paintSeg();
+  $("formTitle").textContent="✎ 編輯紀錄"; $("saveBtn").textContent="儲存修改";
+  $("cancelEdit").classList.remove("hidden"); $("delBtn").classList.remove("hidden");
+  setMsg("formMsg",""); $("form").scrollIntoView({behavior:"smooth"});
+}
+$("delBtn").onclick=()=>{ if(editingId) $("confirm").classList.add("show"); };
+$("cNo").onclick=()=> $("confirm").classList.remove("show");
+$("cYes").onclick=async()=>{
+  $("confirm").classList.remove("show");
+  try{ await deleteDoc(doc(fs,"or_records",editingId)); resetForm(); setMsg("formMsg","已刪除。","ok"); }
+  catch(err){ setMsg("formMsg","刪除失敗，可能沒有權限。","err"); }
+};
+["q_month","q_role","q_type","q_status","q_text"].forEach(id=> $(id).addEventListener("input", render));
+
+function filtered(){
+  const m=$("q_month").value, ro=$("q_role").value, ty=$("q_type").value, st=$("q_status").value, tx=$("q_text").value.trim().toLowerCase();
+  return records.filter(r=>{
+    if(m && !(r.date||"").startsWith(m)) return false;
+    if(ro && r.role!==ro) return false;
+    if(ty && r.type!==ty) return false;
+    if(st && (r.status||"待追蹤")!==st) return false;
+    if(tx){ const hay=[r.room,r.patient,r.from,r.to,r.desc,r.finder,r.action].join(" ").toLowerCase(); if(!hay.includes(tx)) return false; }
+    return true;
+  });
+}
+function el(tag,cls,text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+function render(){
+  const mon=records.filter(r=>(r.date||"").startsWith(thisMonth));
+  $("sMiss").textContent=mon.filter(r=>r.type==="未交班").length;
+  $("sCross").textContent=mon.filter(r=>r.type==="交錯班").length;
+  $("sRole").textContent=mon.filter(r=>r.role==="流動").length+"／"+mon.filter(r=>r.role==="麻護").length;
+  $("sOpen").textContent=records.filter(r=>(r.status||"待追蹤")==="待追蹤").length;
+  const list=$("list"); list.innerHTML="";
+  const rows=filtered(); $("count").textContent=`（${rows.length} 筆）`;
+  if(!rows.length){ list.appendChild(el("div","empty", records.length?"沒有符合條件的紀錄":"還沒有紀錄，從上方新增第一筆吧。")); return; }
+  rows.forEach(r=>{
+    const card=el("div","rec"), top=el("div","top");
+    top.appendChild(el("span","date",`${r.date||""} ${r.shift||""}`));
+    top.appendChild(el("span","tag t-role",r.role||""));
+    top.appendChild(el("span","tag "+(r.type==="未交班"?"t-miss":"t-cross"),r.type||""));
+    const st=r.status||"待追蹤"; top.appendChild(el("span","tag "+(st==="已完成"?"t-done":"t-open"),st));
+    if(r.room) top.appendChild(el("span",null,r.room));
+    card.appendChild(top);
+    const who=[r.from&&("交："+r.from), r.to&&("接："+r.to), r.patient&&("病人／手術："+r.patient)].filter(Boolean).join("　");
+    if(who) card.appendChild(el("div","who",who));
+    if(r.desc) card.appendChild(el("div","desc",r.desc));
+    if(r.action) card.appendChild(el("div","desc","處理："+r.action));
+    card.appendChild(el("div","meta",[r.finder&&("通報："+r.finder), r.createdName&&("登錄："+r.createdName)].filter(Boolean).join("　")));
+    card.addEventListener("click",()=>startEdit(r));
+    list.appendChild(card);
+  });
+}
+$("copyBtn").onclick=async()=>{
+  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","病人／手術","情況說明","發現／通報者","處理結果","追蹤狀態"];
+  const clean=v=>String(v||"").replace(/[\t\r\n]+/g," ");
+  const lines=[head.join("\t")].concat(filtered().map(r=>[r.date,r.shift,r.role,r.type,r.room,r.from,r.to,r.patient,r.desc,r.finder,r.action,r.status||"待追蹤"].map(clean).join("\t")));
+  try{ await navigator.clipboard.writeText(lines.join("\n")); setMsg("listMsg","已複製目前篩選的紀錄，可直接貼到 Excel 或 Google 試算表。","ok"); }
+  catch(e){ setMsg("listMsg","無法複製，請改用電腦瀏覽器再試。","err"); }
+};
+
+$("loginBtn").onclick=async()=>{ try{ await signInWithPopup(auth,new GoogleAuthProvider()); }catch(e){ showGate("登入失敗："+(e.code||e.message),true); } };
+
+function startListening(){
+  if(unsub) unsub();
+  const timer=setTimeout(()=>setStatus("資料暫時連不到，請檢查網路。",true),10000);
+  unsub=onSnapshot(query(collection(fs,"or_records"),orderBy("date","desc"),limit(2000)), snap=>{
+    clearTimeout(timer);
+    records=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+    records.sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt||0)-(a.createdAt||0));
+    setStatus("已連線・即時同步中"); render();
+  }, err=>{
+    clearTimeout(timer);
+    if(err.code==="permission-denied") showGate(`你的帳號（${me.email}）尚未被加入名單，請把這個 email 給管理者。`,false);
+    else setStatus("連線中斷，請重新整理頁面。",true);
+  });
+}
+
+if(!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("貼上")){
+  setStatus("尚未設定 Firebase：請在 firebase-config.js 貼上設定。",true);
+  showGate("網站還沒接上 Firebase，請管理者完成設定。",false);
+}else{
+  const app=initializeApp(firebaseConfig);
+  auth=getAuth(app); fs=getFirestore(app);
+  onAuthStateChanged(auth, u=>{
+    me=u;
+    const bar=$("authBar"); bar.innerHTML="";
+    if(!u){ if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate("用 Google 帳號登入後才能查看與登打紀錄。",true); return; }
+    bar.append(document.createTextNode(`已登入：${u.displayName||u.email}　`));
+    const out=el("a",null,"登出"); out.href="#"; out.onclick=e=>{e.preventDefault(); signOut(auth);}; bar.append(out);
+    $("gate").classList.add("hidden"); $("app").classList.remove("hidden");
+    setStatus("連線中…"); startListening();
+  });
+}
+</script>
+</body>
+</html>
