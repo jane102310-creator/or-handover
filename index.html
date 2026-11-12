@@ -140,7 +140,14 @@
       <div><label>問題類型 <span class="req">*</span></label>
         <div class="seg" data-field="type"><button type="button">未交班</button><button type="button">交錯班</button></div></div>
       <div><label>房號</label><input id="f_room" placeholder="例：OR 5"></div>
-      <div><label>手術術式 <span style="color:var(--rose);font-size:12px">（請勿填病歷號、姓名）</span></label><input id="f_patient" placeholder="例：疝氣修補術"></div>
+      <div><label>手術術式</label><input id="f_patient" placeholder="例：疝氣修補術"></div>
+      <div class="full"><label>病人資料 <span style="color:var(--rose);font-size:12px">（只填姓氏，勿填全名、病歷號）</span></label>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px">
+          <div class="seg" data-field="gender"><button type="button">男</button><button type="button">女</button></div>
+          <input id="f_surname" maxlength="2" placeholder="姓氏">
+          <input id="f_age" type="number" inputmode="numeric" min="0" max="120" placeholder="年齡">
+        </div>
+      </div>
       <div><label>交班人員（應交班者）</label><input id="f_from"></div>
       <div><label>接班人員</label><input id="f_to"></div>
       <div class="full"><label>情況說明</label><textarea id="f_desc" placeholder="發生什麼事、漏交或交錯的內容（勿寫病歷號）"></textarea></div>
@@ -153,7 +160,7 @@
         <label class="btn ghost photoBtn">📷 拍照／選照片<input type="file" id="f_photo" accept="image/*" multiple hidden></label>
       </div>
     </div>
-    <p style="margin:12px 0 0;font-size:12.5px;color:var(--rose);background:var(--rose-soft);padding:8px 12px;border-radius:12px">⚠️ 為保護病人隱私：請勿填寫病歷號、病人姓名；照片也不要拍到病人臉部、手圈或病歷。</p>
+    <p style="margin:12px 0 0;font-size:12.5px;color:var(--rose);background:var(--rose-soft);padding:8px 12px;border-radius:12px">⚠️ 為保護病人隱私：病人只填性別、姓氏、年齡，請勿填全名或病歷號；照片也不要拍到病人臉部、手圈或病歷。</p>
     <div class="actions">
       <button type="button" class="btn danger hidden" id="delBtn">刪除</button>
       <button type="submit" class="btn primary" id="saveBtn">儲存紀錄</button>
@@ -234,8 +241,8 @@ const now = new Date();
 const today = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
 const thisMonth = today.slice(0,7);
 let fs=null, auth=null, me=null, records=[], editingId=null, unsub=null;
-const seg = { shift:"", role:"", type:"", status:"待追蹤" };
-const fields = ["room","patient","from","to","desc","finder","action"];
+const seg = { shift:"", role:"", type:"", status:"待追蹤", gender:"" };
+const fields = ["room","patient","surname","age","from","to","desc","finder","action"];
 
 function myName(){ if(me && (me.email||"").toLowerCase()===TEAM) return "同仁"; return (me&&(me.displayName||me.email))||""; }
 function setMsg(id, text, kind){ const m=$(id); m.textContent=text; m.className="msg"+(kind?" "+kind:""); }
@@ -290,7 +297,7 @@ async function photoDocsOf(recordId){
 function resetForm(){
   photos=[]; removedPhotoIds=[]; photoLoadToken++; photosLoading=false; renderPhotos();
   editingId=null; $("form").reset(); $("f_date").value=today;
-  Object.assign(seg,{shift:"",role:"",type:"",status:"待追蹤"}); paintSeg();
+  Object.assign(seg,{shift:"",role:"",type:"",status:"待追蹤",gender:""}); paintSeg();
   $("formTitle").textContent="＋ 新增紀錄"; $("saveBtn").textContent="儲存紀錄";
   $("cancelEdit").classList.add("hidden"); $("delBtn").classList.add("hidden");
 }
@@ -303,8 +310,10 @@ $("form").addEventListener("submit", async e=>{
   const date=$("f_date").value;
   if(!date||!seg.shift||!seg.role||!seg.type){ setMsg("formMsg","請填寫日期、班別、職類與問題類型。","err"); return; }
   if(photosLoading){ setMsg("formMsg","照片還在載入，請稍等再儲存。","err"); return; }
-  const data={date,shift:seg.shift,role:seg.role,type:seg.type,status:seg.status||"待追蹤",updatedAt:Date.now(),updatedBy:me.email};
+  const data={date,shift:seg.shift,role:seg.role,type:seg.type,gender:seg.gender||"",status:seg.status||"待追蹤",updatedAt:Date.now(),updatedBy:me.email};
   fields.forEach(f=> data[f]=$("f_"+f).value.trim().slice(0,2000));
+  data.surname=data.surname.slice(0,2);
+  if(data.age!==""){ const a=parseInt(data.age,10); if(isNaN(a)||a<0||a>120){ setMsg("formMsg","年齡請填 0～120。","err"); return; } data.age=String(a); }
   $("saveBtn").disabled=true;
   try{
     data.photoCount=photos.length;
@@ -325,7 +334,7 @@ $("form").addEventListener("submit", async e=>{
 function startEdit(r){
   editingId=r.id; $("f_date").value=r.date||today;
   fields.forEach(f=> $("f_"+f).value=r[f]||"");
-  Object.assign(seg,{shift:r.shift||"",role:r.role||"",type:r.type||"",status:r.status||"待追蹤"}); paintSeg();
+  Object.assign(seg,{shift:r.shift||"",role:r.role||"",type:r.type||"",status:r.status||"待追蹤",gender:r.gender||""}); paintSeg();
   $("formTitle").textContent="✎ 編輯紀錄"; $("saveBtn").textContent="儲存修改";
   $("cancelEdit").classList.remove("hidden"); $("delBtn").classList.remove("hidden");
   setMsg("formMsg",""); $("form").scrollIntoView({behavior:"smooth"});
@@ -355,7 +364,7 @@ function filtered(){
     if(ro && r.role!==ro) return false;
     if(ty && r.type!==ty) return false;
     if(st && (r.status||"待追蹤")!==st) return false;
-    if(tx){ const hay=[r.room,r.patient,r.from,r.to,r.desc,r.finder,r.action].join(" ").toLowerCase(); if(!hay.includes(tx)) return false; }
+    if(tx){ const hay=[r.room,r.patient,r.surname,r.from,r.to,r.desc,r.finder,r.action].join(" ").toLowerCase(); if(!hay.includes(tx)) return false; }
     return true;
   });
 }
@@ -378,7 +387,8 @@ function render(){
     if(r.photoCount) top.appendChild(el("span","tag t-photo","📷 "+r.photoCount));
     if(r.room) top.appendChild(el("span",null,r.room));
     card.appendChild(top);
-    const who=[r.from&&("交："+r.from), r.to&&("接："+r.to), r.patient&&("術式："+r.patient)].filter(Boolean).join("　");
+    const pt=[r.surname&&(r.surname+(r.gender==="女"?"小姐":r.gender==="男"?"先生":"")), !r.surname&&r.gender, r.age&&(r.age+"歲")].filter(Boolean).join(" ");
+    const who=[pt&&("病人："+pt), r.patient&&("術式："+r.patient), r.from&&("交："+r.from), r.to&&("接："+r.to)].filter(Boolean).join("　");
     if(who) card.appendChild(el("div","who",who));
     if(r.desc) card.appendChild(el("div","desc",r.desc));
     if(r.action) card.appendChild(el("div","desc","處理："+r.action));
@@ -388,9 +398,9 @@ function render(){
   });
 }
 $("copyBtn").onclick=async()=>{
-  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","手術術式","情況說明","發現／通報者","處理結果","追蹤狀態","照片數"];
+  const head=["日期","班別","職類","問題類型","房號","交班人員","接班人員","手術術式","性別","姓氏","年齡","情況說明","發現／通報者","處理結果","追蹤狀態","照片數"];
   const clean=v=>String(v||"").replace(/[\t\r\n]+/g," ");
-  const lines=[head.join("\t")].concat(filtered().map(r=>[r.date,r.shift,r.role,r.type,r.room,r.from,r.to,r.patient,r.desc,r.finder,r.action,r.status||"待追蹤",r.photoCount||0].map(clean).join("\t")));
+  const lines=[head.join("\t")].concat(filtered().map(r=>[r.date,r.shift,r.role,r.type,r.room,r.from,r.to,r.patient,r.gender,r.surname,r.age,r.desc,r.finder,r.action,r.status||"待追蹤",r.photoCount||0].map(clean).join("\t")));
   try{ await navigator.clipboard.writeText(lines.join("\n")); setMsg("listMsg","已複製目前篩選的紀錄，可直接貼到 Excel 或 Google 試算表。","ok"); }
   catch(e){ setMsg("listMsg","無法複製，請改用電腦瀏覽器再試。","err"); }
 };
