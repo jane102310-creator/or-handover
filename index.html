@@ -88,13 +88,10 @@
   </header>
 
   <div class="card hidden" id="gate">
-    <h2>請輸入團隊密碼</h2>
-    <form id="pwForm" autocomplete="on">
-      <div class="grid">
-        <div><label>你的名字或員編（會記在登錄者）</label><input id="g_name" placeholder="例：1060100 王小明" autocomplete="name"></div>
-        <div><label>團隊密碼</label><input id="g_pw" type="password" autocomplete="current-password"></div>
-      </div>
-      <div class="actions" style="justify-content:flex-start"><button type="submit" class="btn primary" id="pwBtn">登入</button></div>
+    <h2>請輸入密碼</h2>
+    <form id="pwForm" autocomplete="off" style="display:flex;gap:8px;max-width:320px">
+      <input id="g_pw" type="password" inputmode="numeric" placeholder="密碼" style="flex:1">
+      <button type="submit" class="btn primary" id="pwBtn">進入</button>
     </form>
     <p class="msg" id="gateText"></p>
     <p style="margin:14px 0 0;font-size:13px"><a href="#" id="loginBtn" style="color:var(--muted)">管理者用 Google 登入</a></p>
@@ -159,6 +156,12 @@
     <div class="actions"><button type="button" class="btn primary" id="m_add">加入名單</button></div>
     <div class="msg" id="m_msg"></div>
     <div id="m_list"></div>
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+      <label>同事用的進入密碼</label>
+      <div id="pinState" class="meta" style="margin:0 0 8px"></div>
+      <div style="display:flex;gap:8px;max-width:320px"><input id="pinNew" inputmode="numeric" placeholder="例：7184" style="flex:1"><button type="button" class="btn primary" id="pinSet">設定</button></div>
+      <div class="msg" id="pinMsg"></div>
+    </div>
   </section>
   </div>
 </div>
@@ -174,7 +177,8 @@
 const V="10.12.2";
 const ADMIN="jane102310@gmail.com";
 const TEAM="orteam@koreabuy.app";
-let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+const teamPw=pin=>"orpin-"+pin+"-handover";
+let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged,
     getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
 const UA=navigator.userAgent||"";
 const IN_APP=/Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Threads|KAKAOTALK|Messenger/i.test(UA);
@@ -185,7 +189,7 @@ const watchdog=setTimeout(()=>{
 try{
   ({ firebaseConfig } = await import("./firebase-config.js?v=2"));
   ({ initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`));
-  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
+  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
   ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
 }catch(e){
   clearTimeout(watchdog);
@@ -203,7 +207,7 @@ let fs=null, auth=null, me=null, records=[], editingId=null, unsub=null;
 const seg = { shift:"", role:"", type:"", status:"待追蹤" };
 const fields = ["room","patient","from","to","desc","finder","action"];
 
-function myName(){ if(me && (me.email||"").toLowerCase()===TEAM){ try{ return localStorage.getItem("or_name")||"團隊帳號"; }catch(e){ return "團隊帳號"; } } return (me&&(me.displayName||me.email))||""; }
+function myName(){ if(me && (me.email||"").toLowerCase()===TEAM) return "同仁"; return (me&&(me.displayName||me.email))||""; }
 function setMsg(id, text, kind){ const m=$(id); m.textContent=text; m.className="msg"+(kind?" "+kind:""); }
 function setStatus(text, warn){ const s=$("status"); s.textContent=text; s.className="status"+(warn?" warn":""); }
 function showGate(text, showLogin){ $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("gateText").className="msg"+(text?" err":""); }
@@ -317,9 +321,11 @@ function startAdmin(){
 }
 function stopAdmin(){ $("adminCard").classList.add("hidden"); if(unsubMembers){unsubMembers();unsubMembers=null;} }
 function renderMembers(){
+  const hasTeam=members.some(m=>m.email===TEAM);
+  $("pinState").textContent=hasTeam?"✅ 已啟用：同事輸入密碼就能進入。":"尚未設定：輸入密碼後按「設定」，同事就能用密碼進入。";
   const box=$("m_list"); box.innerHTML="";
   box.appendChild(el("div","meta",`目前名單（${members.length} 人）`));
-  members.forEach(m=>{
+  members.filter(m=>m.email!==TEAM).forEach(m=>{
     const row=el("div","rec"); row.style.cursor="default"; row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
     const t=el("div",null,(m.name?m.name+"　":"")+m.email); t.style.flex="1"; t.style.wordBreak="break-all";
     row.appendChild(t);
@@ -331,6 +337,26 @@ function renderMembers(){
     box.appendChild(row);
   });
 }
+$("pinSet").onclick=async()=>{
+  const pin=$("pinNew").value.trim();
+  if(pin.length<4){ setMsg("pinMsg","密碼至少 4 個字。","err"); return; }
+  $("pinSet").disabled=true; setMsg("pinMsg","設定中…");
+  try{
+    const a2=getAuth(initializeApp(firebaseConfig,"setup-"+Date.now()));
+    try{ await createUserWithEmailAndPassword(a2,TEAM,teamPw(pin)); }
+    catch(e){
+      if(e.code!=="auth/email-already-in-use") throw e;
+      try{ await signInWithEmailAndPassword(a2,TEAM,teamPw(pin)); }
+      catch(e2){ throw {code:"pin-mismatch"}; }
+    }
+    await signOut(a2);
+    await setDoc(doc(fs,"or_members",TEAM),{name:"同仁（密碼）",addedAt:Date.now()});
+    $("pinNew").value=""; setMsg("pinMsg",`完成！同事輸入 ${pin} 就能進入。`,"ok");
+  }catch(e){
+    setMsg("pinMsg", e.code==="pin-mismatch" ? "團隊帳號已用別的密碼建立過；要換密碼請告訴 Claude 協助。" :
+      e.code==="auth/operation-not-allowed" ? "Firebase 尚未開啟「電子郵件/密碼」登入方式。" : "設定失敗（"+(e.code||e.message)+"）","err");
+  }finally{ $("pinSet").disabled=false; }
+};
 $("m_add").onclick=async()=>{
   const email=$("m_email").value.trim().toLowerCase(), name=$("m_name").value.trim().slice(0,50);
   if(!/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(email)){ setMsg("m_msg","請輸入正確的 Gmail。","err"); return; }
@@ -340,16 +366,13 @@ $("m_add").onclick=async()=>{
   finally{ $("m_add").disabled=false; }
 };
 
-try{ $("g_name").value=localStorage.getItem("or_name")||""; }catch(e){}
 $("pwForm").addEventListener("submit", async ev=>{
   ev.preventDefault();
-  const name=$("g_name").value.trim(), pw=$("g_pw").value;
-  if(!name){ showGate("請填你的名字或員編。",true); return; }
-  if(!pw){ showGate("請輸入團隊密碼。",true); return; }
-  try{ localStorage.setItem("or_name",name); }catch(e){}
+  const pin=$("g_pw").value.trim();
+  if(!pin){ showGate("請輸入密碼。",true); return; }
   $("pwBtn").disabled=true;
-  try{ await signInWithEmailAndPassword(auth,TEAM,pw); $("g_pw").value=""; }
-  catch(e){ showGate((e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/invalid-login-credentials")?"密碼不對，請再試一次。":(e.code==="auth/too-many-requests"?"嘗試太多次，請稍後再試。":"登入失敗（"+(e.code||e.message)+"）"),true); }
+  try{ await signInWithEmailAndPassword(auth,TEAM,teamPw(pin)); $("g_pw").value=""; }
+  catch(e){ showGate(e.code==="auth/too-many-requests"?"嘗試太多次，請稍後再試。":(String(e.code).includes("network")?"網路不穩，請再試一次。":"密碼不對，請再試一次。"),true); }
   finally{ $("pwBtn").disabled=false; }
 });
 $("loginBtn").onclick=async(ev)=>{
@@ -373,7 +396,7 @@ function startListening(){
     setStatus("已連線・即時同步中"); render();
   }, err=>{
     clearTimeout(timer);
-    if(err.code==="permission-denied") { showGate(`這個帳號（${me.email}）沒有權限，請改用團隊密碼登入。`,true); }
+    if(err.code==="permission-denied") { showGate(`這個帳號（${me.email}）沒有權限，請用密碼進入。`,true); }
     else setStatus("連線中斷，請重新整理頁面。",true);
   });
 }
