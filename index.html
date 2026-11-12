@@ -484,6 +484,7 @@ let unsubPending=null;
 function enterPending(){
   if(unsub){ unsub(); unsub=null; }
   const email=(me.email||"").toLowerCase();
+  if(email===TEAM){ gateNote="舊的共用密碼已停用，請改用 Gmail 登入。"; signOut(auth); return; }
   $("gate").classList.remove("hidden"); $("app").classList.add("hidden");
   $("loginBox").classList.add("hidden"); $("pendingBox").classList.remove("hidden");
   $("pendingText").textContent=`已用 ${email} 送出申請。`;
@@ -500,6 +501,8 @@ $("pendingOut").onclick=e=>{ e.preventDefault(); if(unsubPending){unsubPending()
 // ===== 成員管理（只有管理者）=====
 let unsubMembers=null, members=[], pendingRemove=null, unsubReq=null;
 function renderRequests(list){
+  list.filter(r=>r.email===TEAM).forEach(r=>deleteDoc(doc(fs,"or_requests",r.email)).catch(()=>{}));
+  list=list.filter(r=>r.email!==TEAM);
   $("reqCard").classList.toggle("hidden",!list.length);
   $("reqCount").textContent=`（${list.length} 人）`;
   const box=$("reqList"); box.innerHTML="";
