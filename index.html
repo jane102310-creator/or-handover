@@ -87,18 +87,17 @@
     <div class="status" id="authBar"></div>
   </header>
 
-  <div class="card hidden" id="inapp" style="border-color:var(--amber);background:var(--amber-soft)">
-    <h2 style="color:var(--amber)">請改用 Safari 或 Chrome 開啟</h2>
-    <p style="margin:0 0 10px">你是從 Instagram／LINE／Facebook 等 App 裡打開的，這種瀏覽器無法用 Google 登入。</p>
-    <p style="margin:0 0 12px">請按右上角「⋯」→「在外部瀏覽器開啟」（或「以 Safari 開啟」）。也可以複製網址，貼到 Safari。</p>
-    <button type="button" class="btn primary" id="copyUrl">複製網址</button>
-    <div class="msg" id="copyUrlMsg"></div>
-  </div>
-
   <div class="card hidden" id="gate">
-    <h2>請先登入</h2>
-    <p id="gateText" style="margin:0 0 12px;color:var(--muted)">用 Google 帳號登入後才能查看與登打紀錄。</p>
-    <button type="button" class="btn primary" id="loginBtn">使用 Google 登入</button>
+    <h2>請輸入團隊密碼</h2>
+    <form id="pwForm" autocomplete="on">
+      <div class="grid">
+        <div><label>你的名字或員編（會記在登錄者）</label><input id="g_name" placeholder="例：1060100 王小明" autocomplete="name"></div>
+        <div><label>團隊密碼</label><input id="g_pw" type="password" autocomplete="current-password"></div>
+      </div>
+      <div class="actions" style="justify-content:flex-start"><button type="submit" class="btn primary" id="pwBtn">登入</button></div>
+    </form>
+    <p class="msg" id="gateText"></p>
+    <p style="margin:14px 0 0;font-size:13px"><a href="#" id="loginBtn" style="color:var(--muted)">管理者用 Google 登入</a></p>
   </div>
   <div id="app" class="hidden">
 
@@ -174,22 +173,11 @@
 <script type="module">
 const V="10.12.2";
 const ADMIN="jane102310@gmail.com";
-let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged,
+const TEAM="orteam@koreabuy.app";
+let firebaseConfig, initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, signOut, onAuthStateChanged,
     getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit;
 const UA=navigator.userAgent||"";
 const IN_APP=/Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Threads|KAKAOTALK|Messenger/i.test(UA);
-if(/Line\//i.test(UA) && !/openExternalBrowser=1/.test(location.search)){
-  // LINE：自動改用外部瀏覽器（Safari / Chrome）開啟
-  location.replace(location.origin+location.pathname+"?openExternalBrowser=1");
-}
-if(IN_APP){
-  document.getElementById("inapp").classList.remove("hidden");
-  document.getElementById("copyUrl").onclick=async()=>{
-    const url="https://jane102310-creator.github.io/or-handover/";
-    try{ await navigator.clipboard.writeText(url); document.getElementById("copyUrlMsg").textContent="已複製，請打開 Safari 貼上網址。"; }
-    catch(e){ document.getElementById("copyUrlMsg").textContent="網址：" + url; }
-  };
-}
 const watchdog=setTimeout(()=>{
   const s=document.getElementById("status");
   s.textContent="載入太久沒有回應。請按右上「⋯」用 Safari 或 Chrome 開啟此網址，或檢查網路後重新整理。"; s.className="status warn";
@@ -197,7 +185,7 @@ const watchdog=setTimeout(()=>{
 try{
   ({ firebaseConfig } = await import("./firebase-config.js?v=2"));
   ({ initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`));
-  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
+  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, signOut, onAuthStateChanged } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`));
   ({ getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`));
 }catch(e){
   clearTimeout(watchdog);
@@ -215,9 +203,10 @@ let fs=null, auth=null, me=null, records=[], editingId=null, unsub=null;
 const seg = { shift:"", role:"", type:"", status:"待追蹤" };
 const fields = ["room","patient","from","to","desc","finder","action"];
 
+function myName(){ if(me && (me.email||"").toLowerCase()===TEAM){ try{ return localStorage.getItem("or_name")||"團隊帳號"; }catch(e){ return "團隊帳號"; } } return (me&&(me.displayName||me.email))||""; }
 function setMsg(id, text, kind){ const m=$(id); m.textContent=text; m.className="msg"+(kind?" "+kind:""); }
 function setStatus(text, warn){ const s=$("status"); s.textContent=text; s.className="status"+(warn?" warn":""); }
-function showGate(text, showLogin){ if(IN_APP){ $("gate").classList.add("hidden"); $("app").classList.add("hidden"); return; } $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("loginBtn").classList.toggle("hidden",!showLogin); }
+function showGate(text, showLogin){ $("gate").classList.remove("hidden"); $("app").classList.add("hidden"); $("gateText").textContent=text; $("gateText").className="msg"+(text?" err":""); }
 
 document.querySelectorAll(".seg").forEach(el=>{
   el.addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; seg[el.dataset.field]=b.textContent; paintSeg(); });
@@ -243,7 +232,7 @@ $("form").addEventListener("submit", async e=>{
   $("saveBtn").disabled=true;
   try{
     if(editingId){ await updateDoc(doc(fs,"or_records",editingId),data); setMsg("formMsg","已更新。","ok"); }
-    else{ data.createdAt=Date.now(); data.createdBy=me.email; data.createdName=me.displayName||""; await addDoc(collection(fs,"or_records"),data); setMsg("formMsg","已儲存，大家都看得到了。","ok"); }
+    else{ data.createdAt=Date.now(); data.createdBy=me.email; data.createdName=myName(); await addDoc(collection(fs,"or_records"),data); setMsg("formMsg","已儲存，大家都看得到了。","ok"); }
     resetForm();
   }catch(err){ setMsg("formMsg", err.code==="permission-denied" ? "沒有權限，請聯絡管理者把你加入名單。" : "儲存失敗，請再試一次。","err"); }
   finally{ $("saveBtn").disabled=false; }
@@ -351,7 +340,21 @@ $("m_add").onclick=async()=>{
   finally{ $("m_add").disabled=false; }
 };
 
-$("loginBtn").onclick=async()=>{
+try{ $("g_name").value=localStorage.getItem("or_name")||""; }catch(e){}
+$("pwForm").addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  const name=$("g_name").value.trim(), pw=$("g_pw").value;
+  if(!name){ showGate("請填你的名字或員編。",true); return; }
+  if(!pw){ showGate("請輸入團隊密碼。",true); return; }
+  try{ localStorage.setItem("or_name",name); }catch(e){}
+  $("pwBtn").disabled=true;
+  try{ await signInWithEmailAndPassword(auth,TEAM,pw); $("g_pw").value=""; }
+  catch(e){ showGate((e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/invalid-login-credentials")?"密碼不對，請再試一次。":(e.code==="auth/too-many-requests"?"嘗試太多次，請稍後再試。":"登入失敗（"+(e.code||e.message)+"）"),true); }
+  finally{ $("pwBtn").disabled=false; }
+});
+$("loginBtn").onclick=async(ev)=>{
+  ev.preventDefault();
+  if(IN_APP){ showGate("App 內建瀏覽器不能用 Google 登入，請改用 Safari 開啟。",true); return; }
   try{ await signInWithPopup(auth,new GoogleAuthProvider()); }
   catch(e){
     if(e.code==="auth/popup-blocked"||e.code==="auth/operation-not-supported-in-this-environment"){ try{ await signInWithRedirect(auth,new GoogleAuthProvider()); return; }catch(e2){ e=e2; } }
@@ -370,7 +373,7 @@ function startListening(){
     setStatus("已連線・即時同步中"); render();
   }, err=>{
     clearTimeout(timer);
-    if(err.code==="permission-denied") showGate(`你的帳號（${me.email}）尚未被加入名單，請把這個 email 給管理者。`,false);
+    if(err.code==="permission-denied") { showGate(`這個帳號（${me.email}）沒有權限，請改用團隊密碼登入。`,true); }
     else setStatus("連線中斷，請重新整理頁面。",true);
   });
 }
@@ -384,8 +387,8 @@ if(!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("
   onAuthStateChanged(auth, u=>{
     clearTimeout(watchdog); me=u;
     const bar=$("authBar"); bar.innerHTML="";
-    if(!u){ stopAdmin(); if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate("用 Google 帳號登入後才能查看與登打紀錄。",true); return; }
-    bar.append(document.createTextNode(`已登入：${u.displayName||u.email}　`));
+    if(!u){ stopAdmin(); if(unsub){unsub();unsub=null;} records=[]; setStatus(""); showGate("",true); return; }
+    bar.append(document.createTextNode(`已登入：${myName()}　`));
     const out=el("a",null,"登出"); out.href="#"; out.onclick=e=>{e.preventDefault(); signOut(auth);}; bar.append(out);
     $("gate").classList.add("hidden"); $("app").classList.remove("hidden");
     setStatus("連線中…"); startListening();
